@@ -1,4 +1,6 @@
 # Vector
+<img width="1178" height="788" alt="image" src="https://github.com/user-attachments/assets/feef3fb9-8b64-4a81-bd67-ca9659d8a970" />
+
 
 Daily media for who you're becoming. Discovered live from the web, ranked for potential instead of attention.
 
