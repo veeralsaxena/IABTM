@@ -85,6 +85,8 @@ export default function HomePage() {
   const [reflection, setReflection] = useState<string | null>(null);
   const [showCheckIn, setShowCheckIn] = useState(false);
   const [showBriefing, setShowBriefing] = useState(true);
+  const [feedbackNote, setFeedbackNote] = useState<string | null>(null);
+  const [hiddenIds, setHiddenIds] = useState<Set<string>>(new Set());
   const [busy, setBusy] = useState(false);
   const [stats, setStats] = useState({
     curated: "0",
@@ -184,6 +186,11 @@ export default function HomePage() {
     action: string,
     mediaId?: string,
     activityId?: string,
+    mediaMeta?: {
+      title?: string;
+      url?: string | null;
+      mediaType?: string;
+    },
   ) {
     if (!data) return;
     await fetch("/api/interact", {
@@ -194,8 +201,60 @@ export default function HomePage() {
         mediaId,
         activityId,
         pathId: data.path.id,
+        mediaTitle: mediaMeta?.title,
+        mediaUrl: mediaMeta?.url,
+        mediaType: mediaMeta?.mediaType,
       }),
     });
+
+    // Immediate UI: remove this exact video now. Hard block is stored in DB
+    // for next curate/discover — we do NOT rewrite today's cached identity query text.
+    if (
+      (action === "not_for_me" || action === "not_today") &&
+      mediaId
+    ) {
+      setHiddenIds((prev) => new Set(prev).add(mediaId));
+      setFeedbackNote(
+        action === "not_for_me"
+          ? "Got it — we’ve removed this one and won’t recommend it again."
+          : "Noted for later — we’ll deprioritize this tone.",
+      );
+      // Promote next secondary into primary slot if available
+      setData((prev) => {
+        if (!prev) return prev;
+        if (prev.briefing.primary.id !== mediaId) {
+          return {
+            ...prev,
+            briefing: {
+              ...prev.briefing,
+              secondary: prev.briefing.secondary.filter((s) => s.id !== mediaId),
+            },
+          };
+        }
+        const next = prev.briefing.secondary.find((s) => s.id !== mediaId);
+        const rest = prev.briefing.secondary.filter(
+          (s) => s.id !== mediaId && s.id !== next?.id,
+        );
+        if (!next) {
+          return {
+            ...prev,
+            briefing: { ...prev.briefing, secondary: rest },
+          };
+        }
+        return {
+          ...prev,
+          briefing: {
+            ...prev.briefing,
+            primary: {
+              ...next,
+              why: prev.briefing.primary.why,
+              scores: prev.briefing.primary.scores,
+            },
+            secondary: rest,
+          },
+        };
+      });
+    }
   }
 
   async function submitCheckIn() {
@@ -298,6 +357,19 @@ export default function HomePage() {
                 });
               }
             }}
+            onSkip={async (id) => {
+              const act = activities.find((a) => a.id === id);
+              if (act?.title && data) {
+                await fetch("/api/check-in", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({
+                    body: `Skipped activity: ${act.title}${act.category ? ` (${act.category})` : ""}`,
+                    pathId: data.path.id,
+                  }),
+                });
+              }
+            }}
             onRefresh={() => load(true)}
           />
         ) : undefined
@@ -362,6 +434,19 @@ export default function HomePage() {
             scores={data.briefing.primary.scores}
             mediaTitle={data.briefing.primary.title}
           />
+        )}
+
+        {feedbackNote && (
+          <div className="rounded-2xl border border-zinc-200 bg-zinc-900 px-4 py-3 text-sm text-zinc-100">
+            {feedbackNote}
+            <button
+              type="button"
+              className="ml-3 text-xs text-zinc-400 underline underline-offset-2"
+              onClick={() => setFeedbackNote(null)}
+            >
+              Dismiss
+            </button>
+          </div>
         )}
 
         {/* Today’s curated pick stays on home */}
@@ -436,12 +521,16 @@ export default function HomePage() {
                       ["viewed", "Mark viewed", "bg-zinc-900 text-white border-zinc-900"],
                       ["resonated", "Resonated", ""],
                       ["not_today", "Not today", "text-zinc-500"],
-                      ["not_for_me", "Not for me", "text-zinc-500"],
+                      ["not_for_me", "Don’t show again", "text-zinc-500"],
                     ].map(([action, label, cls]) => (
                       <button
                         key={action}
                         onClick={() =>
-                          interact(action, data.briefing.primary.id)
+                          interact(action, data.briefing.primary.id, undefined, {
+                            title: data.briefing.primary.title,
+                            url: data.briefing.primary.url,
+                            mediaType: data.briefing.primary.media_type,
+                          })
                         }
                         className={`rounded-full border border-zinc-200 px-4 py-2 text-sm ${cls}`}
                       >
@@ -462,6 +551,13 @@ export default function HomePage() {
                     mediaType={data.briefing.primary.media_type}
                     mediaUrl={data.briefing.primary.url}
                     pathId={data.path.id}
+                    onBlocked={() =>
+                      interact("not_for_me", data.briefing.primary.id, undefined, {
+                        title: data.briefing.primary.title,
+                        url: data.briefing.primary.url,
+                        mediaType: data.briefing.primary.media_type,
+                      })
+                    }
                   />
 
                   <div className="h-1.5 overflow-hidden rounded-full bg-zinc-100">
@@ -539,7 +635,10 @@ export default function HomePage() {
               </Link>
             </div>
             <div className="grid gap-3 sm:grid-cols-2">
-              {data.briefing.secondary.slice(0, 4).map((item) => (
+              {data.briefing.secondary
+                .filter((item) => !hiddenIds.has(item.id))
+                .slice(0, 4)
+                .map((item) => (
                 <article
                   key={item.id}
                   className="overflow-hidden rounded-2xl border border-zinc-200 bg-white"

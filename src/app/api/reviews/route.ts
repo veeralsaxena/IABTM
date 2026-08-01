@@ -114,9 +114,13 @@ export async function POST(request: Request) {
   await supabase.from("check_ins").insert({
     user_id: user.id,
     path_id: pathId,
-    body: `Media review (${sentiment}, ${rating}/5): ${row.media_title ?? mediaRef} — ${review}`,
+    body: `Media review (${sentiment}, ${rating}/5): ${row.media_title ?? mediaRef} — ${reviewText}`,
     growth_signal: sentiment === "liked" ? "resonance" : sentiment === "disliked" ? "mismatch" : "mixed",
   });
 
-  return NextResponse.json({ review: data });
+  // Hard blocklist is media_reviews itself (disliked / ≤2★). No extra table required.
+  return NextResponse.json({
+    review: data,
+    blocked: sentiment === "disliked" || rating <= 2,
+  });
 }

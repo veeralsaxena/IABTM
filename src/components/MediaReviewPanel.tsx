@@ -26,7 +26,8 @@ export function MediaReviewPanel({
   mediaUrl,
   pathId,
   compact,
-}: Props) {
+  onBlocked,
+}: Props & { onBlocked?: () => void }) {
   const [open, setOpen] = useState(false);
   const [rating, setRating] = useState(0);
   const [hover, setHover] = useState(0);
@@ -94,6 +95,7 @@ export function MediaReviewPanel({
     setSentiment(s);
     setSaved(true);
     setOpen(false);
+    if (s === "disliked" || r <= 2) onBlocked?.();
   }
 
   function onStar(n: number) {

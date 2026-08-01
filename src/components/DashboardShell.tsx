@@ -13,10 +13,10 @@ import {
 import {
   ChevronLeft,
   ChevronRight,
-  Compass,
   Film,
   Home,
   LogOut,
+  Network,
   Palette,
   PanelRightClose,
   PanelRightOpen,
@@ -41,8 +41,8 @@ const nav = [
   { href: "/artists", label: "Artists", icon: Palette },
   { href: "/paths", label: "Your paths", icon: Route },
   { href: "/settings", label: "Settings", icon: Settings },
-  { href: "/architecture", label: "How it works", icon: Compass },
   { href: "/demo", label: "Live demo", icon: Workflow },
+  { href: "/architecture", label: "System design", icon: Network },
 ];
 const LEFT_DEFAULT = 240;
 const LEFT_MIN = 180;

@@ -1,11 +1,12 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import {
   ArrowLeft,
   ArrowRight,
   Check,
+  HardDrive,
   Loader2,
   Play,
   Sparkles,
@@ -22,6 +23,11 @@ import { cn } from "@/lib/utils";
 type DemoResult = {
   latencyMs: number;
   model: string;
+  fromCache?: boolean;
+  cacheSource?: string;
+  cacheSavedAt?: string;
+  cacheReason?: string;
+  liveError?: string;
   steps: {
     inputs: {
       me: string[];
@@ -73,6 +79,19 @@ type DemoResult = {
         shortlisted?: boolean;
       }>;
     };
+    agentLoop?: {
+      kind: string;
+      note: string;
+      observed: string;
+      decision: "accept" | "retry";
+      reason: string;
+      heuristicsTriggered: string[];
+      pass1Queries: string[];
+      revisedQueries: string[];
+      pass1Candidates: number;
+      pass2Added: number;
+      mergedCandidates: number;
+    };
     ranking: {
       note: string;
       whyNow: string;
@@ -93,6 +112,7 @@ type DemoResult = {
         name: string;
         brain: string;
         job: string;
+        kind?: string;
       }>;
     };
     feedbackLoop: {
@@ -114,8 +134,9 @@ const STEPS = [
   { id: "method", label: "Method graph" },
   { id: "identity", label: "Identity block" },
   { id: "embed", label: "Embedding" },
-  { id: "agents", label: "Agents" },
+  { id: "agents", label: "Pipeline roles" },
   { id: "search", label: "Web search" },
+  { id: "critic", label: "Agent loop" },
   { id: "rank", label: "Rank & pick" },
   { id: "feedback", label: "Feedback loop" },
 ] as const;
@@ -155,8 +176,33 @@ export default function DemoPage() {
   const [result, setResult] = useState<DemoResult | null>(null);
   const [revealMethod, setRevealMethod] = useState(0);
   const [agentPulse, setAgentPulse] = useState(0);
+  const [cacheMeta, setCacheMeta] = useState<{
+    hasCache: boolean;
+    savedAt?: string;
+    source?: string;
+  } | null>(null);
 
   const stepIndex = STEPS.findIndex((s) => s.id === step);
+
+  useEffect(() => {
+    fetch("/api/demo")
+      .then((r) => r.json())
+      .then((j) => setCacheMeta(j))
+      .catch(() => setCacheMeta({ hasCache: false }));
+  }, [result]);
+
+  async function applyResult(json: DemoResult) {
+    setResult(json);
+    const ranked = json.steps.methodGraph.ranked;
+    for (let i = 1; i <= Math.min(ranked.length, 6); i++) {
+      await new Promise((r) => setTimeout(r, 180));
+      setRevealMethod(i);
+    }
+    for (let i = 0; i < 11; i++) {
+      await new Promise((r) => setTimeout(r, 120));
+      setAgentPulse(i + 1);
+    }
+  }
 
   function toggle(
     list: string[],
@@ -168,35 +214,45 @@ export default function DemoPage() {
     else if (list.length < max) setList([...list, value]);
   }
 
-  async function runPipeline() {
+  async function runPipeline(opts?: { useCache?: boolean }) {
     setBusy(true);
     setError(null);
     setResult(null);
     setRevealMethod(0);
+    setAgentPulse(0);
     setStep("method");
     try {
       const res = await fetch("/api/demo", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ me, iam, answers, learningStyles: styles }),
+        body: JSON.stringify({
+          me,
+          iam,
+          answers,
+          learningStyles: styles,
+          useCache: Boolean(opts?.useCache),
+        }),
       });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || "Demo failed");
-      setResult(json as DemoResult);
-
-      // Animate method graph reveal
-      const ranked = json.steps.methodGraph.ranked as DemoResult["steps"]["methodGraph"]["ranked"];
-      for (let i = 1; i <= Math.min(ranked.length, 6); i++) {
-        await new Promise((r) => setTimeout(r, 180));
-        setRevealMethod(i);
-      }
-      // Pulse agents after result lands
-      for (let i = 0; i < 9; i++) {
-        await new Promise((r) => setTimeout(r, 120));
-        setAgentPulse(i + 1);
-      }
+      await applyResult(json as DemoResult);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Demo failed");
+      // Client-side last resort: ask server for cache explicitly
+      try {
+        const res = await fetch("/api/demo", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ useCache: true }),
+        });
+        const json = await res.json();
+        if (!res.ok) throw new Error(json.error || "No cached demo");
+        await applyResult(json as DemoResult);
+        setError(
+          `Live run failed — showing last successful cache. (${e instanceof Error ? e.message : "error"})`,
+        );
+      } catch {
+        setError(e instanceof Error ? e.message : "Demo failed");
+      }
     } finally {
       setBusy(false);
     }
@@ -234,9 +290,17 @@ export default function DemoPage() {
               </div>
             </div>
           </div>
-          <div className="flex items-center gap-2 text-xs text-zinc-500">
-            <Workflow className="h-3.5 w-3.5" />
-            Real Groq · Gemini · web search
+          <div className="flex items-center gap-2">
+            <Link
+              href="/architecture"
+              className="rounded-full border border-zinc-200 bg-white px-3 py-1.5 text-xs font-medium text-zinc-700 hover:border-zinc-400"
+            >
+              System design
+            </Link>
+            <div className="hidden items-center gap-2 text-xs text-zinc-500 sm:flex">
+              <Workflow className="h-3.5 w-3.5" />
+              Real Groq · Gemini · web search
+            </div>
           </div>
         </div>
       </header>
@@ -251,10 +315,20 @@ export default function DemoPage() {
             Watch the pipeline think
           </h1>
           <p className="mt-3 max-w-2xl text-sm leading-relaxed text-zinc-500 sm:text-base">
-            Pick attributes like a real user. We run the same backend agents —
+            Pick attributes like a real user. We run the same backend pipeline —
             method graph, identity block, embeddings, live web discovery, hybrid
-            rerank — and show every intermediate output. Nothing is faked.
+            rerank — and show every intermediate output. Successful runs are
+            cached so you always have a judge-safe replay.
           </p>
+          {cacheMeta?.hasCache && (
+            <p className="mt-2 text-xs text-zinc-400">
+              Cached run ready
+              {cacheMeta.savedAt
+                ? ` · ${new Date(cacheMeta.savedAt).toLocaleString()}`
+                : ""}
+              {cacheMeta.source ? ` · ${cacheMeta.source}` : ""}
+            </p>
+          )}
         </div>
 
         {/* Step rail */}
@@ -293,8 +367,26 @@ export default function DemoPage() {
         </div>
 
         {error && (
-          <div className="mb-6 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          <div
+            className={cn(
+              "mb-6 rounded-2xl border px-4 py-3 text-sm",
+              result?.fromCache
+                ? "border-amber-200 bg-amber-50 text-amber-900"
+                : "border-red-200 bg-red-50 text-red-700",
+            )}
+          >
             {error}
+          </div>
+        )}
+
+        {result?.fromCache && !error && (
+          <div className="mb-6 flex flex-wrap items-center gap-2 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900">
+            <HardDrive className="h-4 w-4 shrink-0" />
+            Replaying cached successful run
+            {result.cacheSavedAt
+              ? ` · ${new Date(result.cacheSavedAt).toLocaleString()}`
+              : ""}
+            {result.cacheSource ? ` · ${result.cacheSource}` : ""}
           </div>
         )}
 
@@ -395,13 +487,13 @@ export default function DemoPage() {
               <button
                 type="button"
                 disabled={busy}
-                onClick={runPipeline}
+                onClick={() => runPipeline()}
                 className="inline-flex items-center gap-2 rounded-full bg-zinc-900 px-5 py-2.5 text-sm font-semibold text-white"
               >
                 {busy ? (
                   <>
                     <Loader2 className="h-4 w-4 animate-spin" />
-                    Running live agents…
+                    Running live pipeline…
                   </>
                 ) : (
                   <>
@@ -410,7 +502,21 @@ export default function DemoPage() {
                   </>
                 )}
               </button>
+              <button
+                type="button"
+                disabled={busy || !cacheMeta?.hasCache}
+                onClick={() => runPipeline({ useCache: true })}
+                className="inline-flex items-center gap-2 rounded-full border border-zinc-300 bg-white px-4 py-2.5 text-sm font-medium text-zinc-800 disabled:opacity-40"
+                title="Instant replay of the last successful live run — no API spend"
+              >
+                <HardDrive className="h-4 w-4" />
+                Replay last success
+              </button>
             </div>
+            <p className="text-xs text-zinc-400">
+              Live run auto-saves. If APIs flake mid-demo, we fall back to that
+              cache automatically — or hit Replay for an instant judge walkthrough.
+            </p>
           </section>
         )}
 
@@ -635,19 +741,22 @@ export default function DemoPage() {
         {step === "agents" && result && (
           <section className="space-y-6 rounded-[28px] border border-zinc-200 bg-white p-5 shadow-sm sm:p-8">
             <h2 className="font-display text-2xl font-bold">
-              Multi-agent orchestration
+              Orchestration (honest labels)
             </h2>
             <p className="text-sm leading-relaxed text-zinc-500">
-              {result.steps.orchestration.note}
+              {result.steps.orchestration.note} Method matching is{" "}
+              <span className="font-medium text-zinc-800">rules</span>, not an
+              LLM agent — don’t pitch edge-overlap as “agentic.”
             </p>
 
             <div className="relative overflow-hidden rounded-2xl border border-zinc-200 bg-[#0f0f10] p-5">
               <div className="mb-4 text-[11px] uppercase tracking-[0.14em] text-zinc-500">
-                Orchestrator · sequential handoffs
+                LLM / tool roles vs deterministic modules
               </div>
               <div className="flex flex-wrap gap-2">
                 {result.steps.orchestration.agents.map((a, i) => {
                   const lit = agentPulse > i;
+                  const kind = a.kind ?? "tool";
                   return (
                     <div
                       key={a.id}
@@ -658,8 +767,22 @@ export default function DemoPage() {
                           : "border-white/5 bg-white/[0.03] text-zinc-600",
                       )}
                     >
-                      <div className="text-[10px] uppercase tracking-[0.12em] text-zinc-500">
-                        {a.brain}
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="text-[10px] uppercase tracking-[0.12em] text-zinc-500">
+                          {a.brain}
+                        </div>
+                        <span
+                          className={cn(
+                            "rounded-full px-1.5 py-0.5 text-[9px] uppercase tracking-wide",
+                            kind === "llm"
+                              ? "bg-emerald-500/20 text-emerald-300"
+                              : kind === "rules"
+                                ? "bg-amber-500/20 text-amber-200"
+                                : "bg-sky-500/20 text-sky-200",
+                          )}
+                        >
+                          {kind}
+                        </span>
                       </div>
                       <div className="mt-1 text-sm font-semibold">{a.name}</div>
                       <p className="mt-1 text-[11px] leading-snug text-zinc-400">
@@ -670,9 +793,8 @@ export default function DemoPage() {
                 })}
               </div>
               <p className="mt-4 text-xs text-zinc-500">
-                Flow: Method → Identity → Memory → Planner → Retriever →
-                Embedder → Reranker → Explainer. Groq plans and explains; math
-                ranks.
+                Pitch to judges: orchestrated LLM writers + tool retriever +
+                deterministic ranker/blocklist — not “every box is an agent.”
               </p>
             </div>
 
@@ -771,6 +893,105 @@ export default function DemoPage() {
             </ul>
             <NavButtons
               onBack={() => setStep("agents")}
+              onNext={() => setStep("critic")}
+              nextLabel="Watch agent loop"
+            />
+          </section>
+        )}
+
+        {/* CRITIC AGENT LOOP */}
+        {step === "critic" && result && (
+          <section className="space-y-6 rounded-[28px] border border-zinc-200 bg-white p-5 shadow-sm sm:p-8">
+            <h2 className="font-display text-2xl font-bold">
+              Agentic loop — Critic Agent
+            </h2>
+            <p className="text-sm leading-relaxed text-zinc-500">
+              {result.steps.agentLoop?.note ??
+                "Observe first search → Reason → Decide accept or retry → Act (re-search once). Ranking stays math."}
+            </p>
+
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              {[
+                ["1. Observe", result.steps.agentLoop?.observed ?? "—"],
+                [
+                  "2. Reason",
+                  result.steps.agentLoop?.reason ?? "Critic evaluated pass 1",
+                ],
+                [
+                  "3. Decide",
+                  (result.steps.agentLoop?.decision ?? "accept").toUpperCase(),
+                ],
+                [
+                  "4. Act",
+                  result.steps.agentLoop?.decision === "retry"
+                    ? `Re-searched · +${result.steps.agentLoop.pass2Added} new`
+                    : "Kept pass 1 · no re-search",
+                ],
+              ].map(([t, d]) => (
+                <div
+                  key={t}
+                  className="rounded-2xl border border-zinc-200 bg-zinc-50 p-4"
+                >
+                  <div className="text-[11px] uppercase tracking-[0.12em] text-zinc-400">
+                    {t}
+                  </div>
+                  <p className="mt-2 text-sm leading-relaxed text-zinc-800">{d}</p>
+                </div>
+              ))}
+            </div>
+
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="rounded-2xl border border-zinc-200 p-4">
+                <div className="text-[11px] uppercase tracking-[0.12em] text-zinc-400">
+                  Pass 1 queries
+                </div>
+                <ul className="mt-2 space-y-1 text-sm text-zinc-700">
+                  {(
+                    result.steps.agentLoop?.pass1Queries ??
+                    result.steps.discovery.queries
+                  ).map((q) => (
+                    <li key={q} className="rounded-lg bg-zinc-50 px-2 py-1.5">
+                      {q}
+                    </li>
+                  ))}
+                </ul>
+                <p className="mt-2 text-xs text-zinc-400">
+                  Candidates: {result.steps.agentLoop?.pass1Candidates ?? "—"}
+                </p>
+              </div>
+              <div className="rounded-2xl border border-zinc-900 bg-zinc-900 p-4 text-white">
+                <div className="text-[11px] uppercase tracking-[0.12em] text-zinc-500">
+                  Critic revised queries
+                </div>
+                <ul className="mt-2 space-y-1 text-sm text-zinc-200">
+                  {(result.steps.agentLoop?.revisedQueries?.length
+                    ? result.steps.agentLoop.revisedQueries
+                    : ["(none — accepted pass 1)"]
+                  ).map((q) => (
+                    <li key={q} className="rounded-lg bg-white/10 px-2 py-1.5">
+                      {q}
+                    </li>
+                  ))}
+                </ul>
+                <p className="mt-2 text-xs text-zinc-500">
+                  Merged pool:{" "}
+                  {result.steps.agentLoop?.mergedCandidates ??
+                    result.steps.discovery.candidatesFound}
+                  {result.steps.agentLoop?.heuristicsTriggered?.length
+                    ? ` · signals: ${result.steps.agentLoop.heuristicsTriggered.join(", ")}`
+                    : ""}
+                </p>
+              </div>
+            </div>
+
+            <p className="rounded-xl bg-teal-50 px-4 py-3 text-sm text-teal-900">
+              Judge line: this is the agent — it can change what gets searched.
+              The hybrid reranker still picks the winner. Max one retry so demos
+              stay reliable. If the Critic errors, we fail-open and keep pass 1.
+            </p>
+
+            <NavButtons
+              onBack={() => setStep("search")}
               onNext={() => setStep("rank")}
               nextLabel="See final ranking"
             />
@@ -835,7 +1056,9 @@ export default function DemoPage() {
             </div>
 
             <div className="rounded-2xl bg-zinc-900 px-4 py-4 text-sm text-zinc-300">
-              Ran in {result.latencyMs}ms · model {result.model}. This is the
+              Ran in {result.latencyMs}ms · model {result.model}
+              {result.fromCache ? " · cached replay" : " · live"}
+              . This is the
               same stack as production Home curation — demo just exposes every
               step.
             </div>
@@ -843,7 +1066,7 @@ export default function DemoPage() {
             <div className="flex flex-wrap gap-2">
               <button
                 type="button"
-                onClick={() => setStep("search")}
+                onClick={() => setStep("critic")}
                 className="rounded-full border border-zinc-200 px-4 py-2.5 text-sm"
               >
                 Back
@@ -866,12 +1089,29 @@ export default function DemoPage() {
               Feedback loop · human in the loop
             </h2>
             <p className="text-sm leading-relaxed text-zinc-500">
-              {result.steps.feedbackLoop.note} Yes — it{" "}
-              <span className="font-medium text-zinc-800">
-                rewrites the next live identity query
-              </span>{" "}
-              and changes avoid/boost lists in the reranker.
+              {result.steps.feedbackLoop.note}
             </p>
+
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="rounded-2xl border border-zinc-900 bg-zinc-900 p-4 text-white">
+                <div className="text-[11px] uppercase tracking-[0.12em] text-zinc-500">
+                  Hard · guaranteed
+                </div>
+                <p className="mt-2 text-sm leading-relaxed text-zinc-200">
+                  Exact video id (`yt_…`) is stored and filtered out before
+                  ranking. Search can return it — we drop it. UI removes it now.
+                </p>
+              </div>
+              <div className="rounded-2xl border border-zinc-200 bg-zinc-50 p-4">
+                <div className="text-[11px] uppercase tracking-[0.12em] text-zinc-400">
+                  Soft · next run bias
+                </div>
+                <p className="mt-2 text-sm leading-relaxed text-zinc-600">
+                  Live identity query text updates on the <em>next</em> curate
+                  (not every click). Biases similar content — not a guarantee.
+                </p>
+              </div>
+            </div>
 
             <div className="overflow-hidden rounded-2xl border border-zinc-200">
               <div className="grid divide-y divide-zinc-100 sm:grid-cols-2 sm:divide-x sm:divide-y-0">

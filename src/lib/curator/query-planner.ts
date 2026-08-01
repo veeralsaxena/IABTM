@@ -26,6 +26,9 @@ export async function planDiscoveryQueries(input: {
   stage: string;
   learningStyles?: string[];
   checkIn?: string | null;
+  /** Soft feedback — steer search queries away from rejected patterns */
+  avoidHints?: string[];
+  preferHints?: string[];
 }): Promise<PlannedQueries> {
   try {
     const planned = await groqJson<PlannedQueries>(
@@ -49,6 +52,8 @@ Return JSON:
 Rules:
 - Queries must find REAL public web/YouTube content that helps move Me → I Am via the method.
 - Prefer educational / practical / mentor content. Avoid clickbait and hustle porn.
+- If avoidHints are provided, write queries that steer AWAY from those tones/titles/creators (do not search for them; search for the opposite practical alternative).
+- If preferHints are provided, bias queries toward those voices/topics.
 - Include 2 queries per media type.
 - Include 4-6 concrete activities (at least 2 outdoor or movement).
 - No brand names of competing apps.`,
@@ -60,6 +65,8 @@ Rules:
         day: input.path.day_number,
         learningStyles: input.learningStyles ?? [],
         checkIn: input.checkIn ?? null,
+        avoidHints: input.avoidHints?.slice(0, 6) ?? [],
+        preferHints: input.preferHints?.slice(0, 6) ?? [],
         mediaTypes: MEDIA_TYPES,
       }),
     );

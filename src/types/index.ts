@@ -67,6 +67,18 @@ export interface AgentTrace {
   daysAway?: number;
   avoidedFromReviews?: number;
   likedFromReviews?: number;
+  /** Thin agentic loop: critic observes pass-1, may re-search once */
+  agentLoop?: {
+    kind: "critic_research";
+    observed: string;
+    decision: "accept" | "retry";
+    reason: string;
+    heuristicsTriggered: string[];
+    revisedQueries: string[];
+    pass1Candidates: number;
+    pass2Added?: number;
+    mergedCandidates?: number;
+  };
 }
 
 export type ActivityItem = {

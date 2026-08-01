@@ -8,19 +8,46 @@ import { rerankCandidates } from "@/lib/curator/rerank";
 import { embedText } from "@/lib/ai/embeddings";
 import { groqText, GROQ_MODEL } from "@/lib/ai/groq";
 import { cosineSimilarity, cosineToUnit } from "@/lib/curator/identity-block";
+import {
+  heuristicRetrySignals,
+  mergeMediaById,
+  observeDiscoveryPass,
+  runCuratorCritic,
+} from "@/lib/curator/critic-agent";
+import { readDemoCache, writeDemoCache } from "@/lib/demo/cache";
 import type { PathRecord } from "@/types";
 
 /**
- * Judge demo — runs the real pipeline steps without writing user state.
- * Returns every intermediate artifact for the walkthrough UI.
+ * Judge demo — runs the real pipeline without writing user state.
+ * Successful runs are cached to data/demo-last-success.json so judges
+ * always have a replay if live APIs flake.
  */
+
+export async function GET() {
+  const cache = await readDemoCache();
+  if (!cache) {
+    return NextResponse.json({ hasCache: false });
+  }
+  return NextResponse.json({
+    hasCache: true,
+    savedAt: cache.savedAt,
+    source: cache.source,
+    latencyMs: cache.latencyMs,
+    inputs: (cache.payload as { steps?: { inputs?: unknown } })?.steps?.inputs,
+  });
+}
+
 export async function POST(request: Request) {
-  const started = Date.now();
   const body = await request.json().catch(() => ({}));
+  const useCache = Boolean(body.useCache);
   const me = (body.me as string[])?.filter(Boolean).slice(0, 5) ?? [];
   const iam = (body.iam as string[])?.filter(Boolean).slice(0, 5) ?? [];
   const answers = (body.answers as Record<string, string>) ?? {};
   const learningStyles = (body.learningStyles as string[]) ?? ["Visual"];
+
+  if (useCache) {
+    return serveCache({ reason: "requested" });
+  }
 
   if (me.length < 1 || iam.length < 1) {
     return NextResponse.json(
@@ -29,7 +56,82 @@ export async function POST(request: Request) {
     );
   }
 
-  // --- Step: method graph scoring (deterministic) ---
+  const started = Date.now();
+  try {
+    const payload = await runLiveDemo({
+      me,
+      iam,
+      answers,
+      learningStyles,
+      started,
+    });
+
+    try {
+      await writeDemoCache(payload, { latencyMs: payload.latencyMs as number });
+    } catch (e) {
+      console.error("demo cache write failed", e);
+    }
+
+    return NextResponse.json({
+      ...payload,
+      fromCache: false,
+      cached: true,
+    });
+  } catch (e) {
+    console.error("live demo failed — serving cache", e);
+    const fallback = await serveCache({
+      reason: "live_failed",
+      liveError: e instanceof Error ? e.message : "Live demo failed",
+    });
+    if (fallback.status === 200) return fallback;
+    return NextResponse.json(
+      {
+        error:
+          e instanceof Error
+            ? e.message
+            : "Demo failed and no cached run is available.",
+      },
+      { status: 500 },
+    );
+  }
+}
+
+async function serveCache(opts: {
+  reason: "requested" | "live_failed";
+  liveError?: string;
+}) {
+  const cache = await readDemoCache();
+  if (!cache) {
+    return NextResponse.json(
+      { error: "No cached demo run available yet." },
+      { status: 404 },
+    );
+  }
+  const payload = cache.payload as Record<string, unknown>;
+  return NextResponse.json({
+    ...payload,
+    ok: true,
+    fromCache: true,
+    cacheSource: cache.source,
+    cacheSavedAt: cache.savedAt,
+    cacheReason: opts.reason,
+    liveError: opts.liveError,
+    latencyMs:
+      typeof payload.latencyMs === "number"
+        ? payload.latencyMs
+        : cache.latencyMs ?? 0,
+  });
+}
+
+async function runLiveDemo(input: {
+  me: string[];
+  iam: string[];
+  answers: Record<string, string>;
+  learningStyles: string[];
+  started: number;
+}) {
+  const { me, iam, answers, learningStyles, started } = input;
+
   const methodScores = METHODS.map((method) => {
     const fromHits = me.filter((m) =>
       method.from.some((f) => f.toLowerCase() === m.toLowerCase()),
@@ -55,7 +157,6 @@ export async function POST(request: Request) {
     `Me: ${me.join(", ")}. I Am: ${iam.join(", ")}. Method: ${method.id}. Blurb: ${method.blurb}. Vibe: ${answers.vibe ?? "n/a"}.`,
   );
 
-  // --- Step: identity block (Groq) ---
   const identityBlock = await buildIdentityBlock({
     path: {
       me_labels: me,
@@ -68,7 +169,6 @@ export async function POST(request: Request) {
     answers,
   });
 
-  // --- Step: embed identity block + live identity query ---
   let blockEmbedding: number[] = [];
   let queryEmbedding: number[] = [];
   let identityQuery = "";
@@ -112,7 +212,6 @@ export async function POST(request: Request) {
     }
   }
 
-  // --- Step: query planner ---
   const plan = await planDiscoveryQueries({
     path: pathLike,
     stage,
@@ -124,13 +223,13 @@ export async function POST(request: Request) {
     `${method.id} ${me[0]} ${iam[0]}`,
   ];
 
-  // --- Step: live discovery (film only for demo latency) ---
-  const found = await discoverForType({
+  // Pass 1 discovery
+  const found1 = await discoverForType({
     mediaType: "film",
     queries: filmQueries.slice(0, 2),
   });
 
-  const candidates = found.map((c) =>
+  let candidates = found1.map((c) =>
     toMediaItem(c, {
       me,
       iam,
@@ -139,8 +238,57 @@ export async function POST(request: Request) {
       learningStyles,
     }),
   );
+  const pass1Count = candidates.length;
 
-  // --- Step: vector score shortlist vs IDENTITY QUERY embedding ---
+  const observation = observeDiscoveryPass({
+    candidates,
+    queriesUsed: filmQueries,
+    dislikedTitles: [],
+    likedTitles: [],
+  });
+  const heuristicsTriggered = heuristicRetrySignals(observation);
+
+  // Agentic critic: Observe → Reason → Decide → Act (max 1 retry)
+  const critic = await runCuratorCritic({
+    me,
+    iam,
+    method: method.id,
+    stage,
+    identityQuery: identityQuery || identityBlock.rawText,
+    observation,
+  });
+
+  let agentDecision: "accept" | "retry" = "accept";
+  let pass2Added = 0;
+  let usedQueries = filmQueries.slice(0, 2);
+
+  if (critic.needsRetry && critic.revisedFilmQueries.length) {
+    agentDecision = "retry";
+    usedQueries = critic.revisedFilmQueries.slice(0, 2);
+    try {
+      const found2 = await discoverForType({
+        mediaType: "film",
+        queries: usedQueries,
+      });
+      const pass2 = found2.map((c) =>
+        toMediaItem(c, {
+          me,
+          iam,
+          method: method.id,
+          stage,
+          learningStyles,
+        }),
+      );
+      const before = new Set(candidates.map((c) => c.id));
+      candidates = mergeMediaById(candidates, pass2);
+      pass2Added = candidates.filter((c) => !before.has(c.id)).length;
+    } catch (e) {
+      console.error("demo critic retry failed", e);
+      agentDecision = "accept";
+      usedQueries = filmQueries.slice(0, 2);
+    }
+  }
+
   const vectorScores: Record<string, number> = {};
   const compareAgainst =
     queryEmbedding.length > 0
@@ -177,7 +325,6 @@ export async function POST(request: Request) {
 
   const top = ranked.slice(0, 5);
 
-  // Explainer for #1
   let whyNow = "";
   let primaryWhy = "";
   if (top[0]) {
@@ -203,7 +350,7 @@ export async function POST(request: Request) {
   const previewDims = (v: number[], n = 16) =>
     v.slice(0, n).map((x) => Number(x.toFixed(4)));
 
-  return NextResponse.json({
+  return {
     ok: true,
     model: GROQ_MODEL,
     latencyMs: Date.now() - started,
@@ -243,7 +390,7 @@ export async function POST(request: Request) {
         queryNorm: magnitude(queryEmbedding),
       },
       discovery: {
-        queries: filmQueries,
+        queries: usedQueries,
         plannedAll: plan.queriesByType,
         activities: plan.activities.slice(0, 4),
         candidatesFound: candidates.length,
@@ -264,6 +411,19 @@ export async function POST(request: Request) {
               : null,
           shortlisted: shortlist.some((s) => s.id === c.id),
         })),
+      },
+      agentLoop: {
+        kind: "critic_research",
+        note: "This is the real agentic hop: Observe pass-1 titles → Reason (Groq Critic) → Decide accept|retry → Act (re-search once). Ranking stays math. Fail-open if critic errors.",
+        observed: critic.observation,
+        decision: agentDecision,
+        reason: critic.reason,
+        heuristicsTriggered,
+        pass1Queries: filmQueries.slice(0, 2),
+        revisedQueries: critic.revisedFilmQueries,
+        pass1Candidates: pass1Count,
+        pass2Added: agentDecision === "retry" ? pass2Added : 0,
+        mergedCandidates: candidates.length,
       },
       ranking: {
         note: "Hybrid reranker: cosine(identity-query, video text) when available + lexical attribute/method fit + duration + anti-clickbait. LLM does not pick the winner.",
@@ -291,103 +451,126 @@ export async function POST(request: Request) {
         primaryWhy,
       },
       orchestration: {
-        note: "Multi-agent orchestration: specialized agents with typed handoffs under one orchestrator. Not one mega-prompt.",
+        note: "Orchestrated pipeline + one bounded agentic loop (Critic). Method matcher & reranker stay deterministic — not agents.",
         agents: [
           {
             id: "orchestrator",
             name: "Orchestrator",
             brain: "pipeline",
-            job: "Sequences agents, passes outputs, caches briefing",
+            job: "Sequences roles, caches briefing — conductor, not an LLM",
+            kind: "orchestrator",
           },
           {
             id: "method",
-            name: "Method Agent",
+            name: "Method matcher",
             brain: "rules",
-            job: "Scores Me→Method→I Am graph edges; picks method",
+            job: "Attribute↔method overlap scoring — deterministic, NOT an LLM agent",
+            kind: "rules",
           },
           {
             id: "identity",
-            name: "Identity Agent",
+            name: "Identity writer",
             brain: "Groq",
-            job: "Writes who-now / becoming / how identity block",
+            job: "LLM writes who-now / becoming / how identity block",
+            kind: "llm",
           },
           {
             id: "memory",
-            name: "Memory Agent",
+            name: "Memory loader",
             brain: "DB",
-            job: "Loads reviews, activities, artist feedback into next query",
+            job: "Loads reviews, blocks, activities into next run",
+            kind: "tool",
           },
           {
             id: "planner",
-            name: "Query Planner",
+            name: "Query planner",
             brain: "Groq",
-            job: "Turns identity context into web/YouTube search queries",
+            job: "LLM turns identity context into search queries",
+            kind: "llm",
           },
           {
             id: "retriever",
             name: "Retriever",
             brain: "tools",
-            job: "Live YouTube + DuckDuckGo + Spotify discovery",
+            job: "Live YouTube / web / Spotify discovery",
+            kind: "tool",
+          },
+          {
+            id: "critic",
+            name: "Critic agent",
+            brain: "Groq",
+            job: "Observe pass-1 → decide accept|retry → re-search once (the agentic loop)",
+            kind: "llm",
           },
           {
             id: "embedder",
-            name: "Embedding Agent",
+            name: "Embedder",
             brain: "Gemini",
-            job: "Embeds identity query + shortlist media into 768-d space",
+            job: "Embeds identity query + shortlist media (768-d)",
+            kind: "tool",
           },
           {
             id: "reranker",
-            name: "Reranker",
+            name: "Hybrid reranker",
             brain: "math",
-            job: "Hybrid scores; chooses winners (not the LLM)",
+            job: "Scores & picks winners — deterministic, NOT an LLM",
+            kind: "rules",
+          },
+          {
+            id: "blocklist",
+            name: "Hard blocklist",
+            brain: "DB filter",
+            job: "Drops blocked yt_/web_ ids before ranking — enforces dislike",
+            kind: "rules",
           },
           {
             id: "explainer",
             name: "Explainer",
             brain: "Groq",
-            job: "Writes why-now after ranking is fixed",
+            job: "LLM writes why-now after ranking is fixed",
+            kind: "llm",
           },
         ],
       },
       feedbackLoop: {
-        note: "Human-in-the-loop: ratings/activities rewrite the NEXT live identity query and hard-avoid disliked media.",
+        note: "Two layers: (1) HARD blocklist by media id — guaranteed no re-show of that exact video. (2) Soft live-identity-query text — biases NEXT search/rank toward/away from similar content. Soft is NOT a guarantee for lookalikes.",
         affectsLiveIdentityQuery: true,
         channels: [
           {
-            signal: "1★ / disliked video",
-            store: "media_reviews + interactions + check_ins",
+            signal: "1★ / disliked / Don’t show again",
+            store: "media_reviews blocklist + interactions",
             effect:
-              "Title + reason enter dislikedTitles/dislikedReasons in the next identity query; media_ref is hard-avoided in rerank; similar titles are penalized",
+              "IMMEDIATE: UI removes that card. PERSISTED: yt_/web_ id hard-filtered on every future Home/Discover run. ALSO: title/reason appended on NEXT identity-query rebuild (soft bias against similar).",
           },
           {
             signal: "5★ / liked video",
             store: "media_reviews + interactions",
             effect:
-              "Title enters likedTitles → identity query biases toward similar depth/tone; soft boost in rerank",
+              "Soft only: liked titles enter next identity query + rerank boost. No hard ‘must show’.",
           },
           {
             signal: "Completed activity",
             store: "check_ins (Completed activity: …)",
             effect:
-              "Appears in identity query as practiced activities — prefer media that deepens those practices",
+              "Soft: next identity query prefers media that deepens those practices",
           },
           {
             signal: "Skipped activity",
-            store: "none today",
+            store: "check_ins (Skipped activity: …)",
             effect:
-              "Honest gap: we do not yet penalize incomplete activities — only completions feed the loop",
+              "Soft: next identity query asks for gentler alternatives",
           },
           {
             signal: "Disliked artist",
-            store: "artist_feedback + check_ins",
+            store: "artist_feedback",
             effect:
-              "Artist hidden on Artists page next load; note can appear in latest check-in text for the query",
+              "HARD for Artists page (hidden). Soft in identity query (‘Avoid these mentors…’). Does not block unrelated YouTube ids.",
           },
           {
             signal: "Changed Me / I Am attributes",
             store: "paths + identity_embedding rebuild",
             effect:
-              "New method, new identity block, invalidate today’s briefing — full re-curate",
+              "Full re-curate: new method, new identity block, invalidate briefing",
           },
         ],
         simulatedAfterDislike: top[0]
@@ -403,7 +586,7 @@ export async function POST(request: Request) {
           : null,
       },
     },
-  });
+  };
 }
 
 function magnitude(v: number[]) {

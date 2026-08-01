@@ -27,7 +27,7 @@ export default function LandingPage() {
             href="/architecture"
             className="hidden rounded-full px-4 py-2 text-sm text-zinc-600 hover:text-zinc-900 sm:inline"
           >
-            How it works
+            System design
           </Link>
           <Link
             href="/demo"

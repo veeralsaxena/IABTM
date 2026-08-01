@@ -27,6 +27,7 @@ export function StatusPanel({
   stats,
   activities = [],
   onMarkDone,
+  onSkip,
   onRefresh,
 }: {
   pathLabel: string;
@@ -41,17 +42,30 @@ export function StatusPanel({
   };
   activities?: Activity[];
   onMarkDone?: (activityId: string) => void | Promise<void>;
+  onSkip?: (activityId: string) => void | Promise<void>;
   onRefresh?: () => void;
 }) {
   const [done, setDone] = useState<Set<string>>(new Set());
+  const [skipped, setSkipped] = useState<Set<string>>(new Set());
   const [busyId, setBusyId] = useState<string | null>(null);
 
   async function mark(id: string) {
-    if (done.has(id) || busyId) return;
+    if (done.has(id) || skipped.has(id) || busyId) return;
     setBusyId(id);
     try {
       await onMarkDone?.(id);
       setDone((prev) => new Set(prev).add(id));
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  async function skip(id: string) {
+    if (done.has(id) || skipped.has(id) || busyId) return;
+    setBusyId(id);
+    try {
+      await onSkip?.(id);
+      setSkipped((prev) => new Set(prev).add(id));
     } finally {
       setBusyId(null);
     }
@@ -151,12 +165,13 @@ export function StatusPanel({
           {activities.length ? (
             activities.map((activity) => {
               const isDone = done.has(activity.id);
+              const isSkipped = skipped.has(activity.id);
               return (
                 <div
                   key={activity.id}
                   className={cn(
                     "rounded-xl bg-white/5 p-3 transition",
-                    isDone && "opacity-60",
+                    (isDone || isSkipped) && "opacity-60",
                   )}
                 >
                   <div className="text-[10px] uppercase tracking-wide text-zinc-400">
@@ -165,7 +180,7 @@ export function StatusPanel({
                   <div
                     className={cn(
                       "mt-1 text-sm font-medium leading-snug",
-                      isDone && "line-through",
+                      (isDone || isSkipped) && "line-through",
                     )}
                   >
                     {activity.title}
@@ -175,23 +190,33 @@ export function StatusPanel({
                       {activity.description}
                     </p>
                   )}
-                  <button
-                    type="button"
-                    disabled={isDone || busyId === activity.id}
-                    onClick={() => mark(activity.id)}
-                    className={cn(
-                      "mt-2.5 w-full rounded-full py-1.5 text-xs font-semibold",
-                      isDone
-                        ? "bg-white/10 text-zinc-300"
-                        : "bg-white text-zinc-900 hover:bg-zinc-100",
-                    )}
-                  >
-                    {isDone
-                      ? "Done ✓ — will shape tomorrow’s media"
-                      : busyId === activity.id
-                        ? "Saving…"
-                        : "Mark done"}
-                  </button>
+                  <div className="mt-2.5 flex gap-2">
+                    <button
+                      type="button"
+                      disabled={isDone || isSkipped || busyId === activity.id}
+                      onClick={() => mark(activity.id)}
+                      className={cn(
+                        "flex-1 rounded-full py-1.5 text-xs font-semibold",
+                        isDone
+                          ? "bg-white/10 text-zinc-300"
+                          : "bg-white text-zinc-900 hover:bg-zinc-100",
+                      )}
+                    >
+                      {isDone
+                        ? "Done ✓"
+                        : busyId === activity.id
+                          ? "…"
+                          : "Mark done"}
+                    </button>
+                    <button
+                      type="button"
+                      disabled={isDone || isSkipped || busyId === activity.id}
+                      onClick={() => skip(activity.id)}
+                      className="rounded-full border border-white/15 px-3 py-1.5 text-xs text-zinc-400 hover:text-white"
+                    >
+                      {isSkipped ? "Skipped" : "Skip"}
+                    </button>
+                  </div>
                 </div>
               );
             })

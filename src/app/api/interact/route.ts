@@ -1,6 +1,10 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 
+/**
+ * Logs interactions. For not_for_me / not_today on web media (yt_…),
+ * also upserts media_reviews so the hard blocklist can exclude them forever.
+ */
 export async function POST(request: Request) {
   const supabase = await createClient();
   const {
@@ -10,7 +14,25 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const { mediaId, activityId, pathId, action } = await request.json();
+  const body = await request.json().catch(() => ({}));
+  const {
+    mediaId,
+    activityId,
+    pathId,
+    action,
+    mediaTitle,
+    mediaUrl,
+    mediaType,
+  } = body as {
+    mediaId?: string;
+    activityId?: string;
+    pathId?: string;
+    action?: string;
+    mediaTitle?: string;
+    mediaUrl?: string;
+    mediaType?: string;
+  };
+
   const allowed = [
     "viewed",
     "saved",
@@ -19,7 +41,7 @@ export async function POST(request: Request) {
     "not_for_me",
     "resonated",
   ];
-  if (!allowed.includes(action)) {
+  if (!action || !allowed.includes(action)) {
     return NextResponse.json({ error: "Invalid action" }, { status: 400 });
   }
 
@@ -29,7 +51,6 @@ export async function POST(request: Request) {
     typeof activityId === "string" && uuidRe.test(activityId)
       ? activityId
       : null;
-  // Web-discovered media uses synthetic ids (yt_...), so skip media FK when not UUID.
   const safeMediaId =
     typeof mediaId === "string" && uuidRe.test(mediaId) ? mediaId : null;
 
@@ -45,5 +66,33 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  return NextResponse.json({ ok: true });
+  // Hard block: never show this media again
+  if (
+    (action === "not_for_me" || action === "not_today") &&
+    typeof mediaId === "string" &&
+    mediaId.length > 0
+  ) {
+    const rating = action === "not_for_me" ? 1 : 2;
+    const sentiment = action === "not_for_me" ? "disliked" : "mixed";
+    await supabase.from("media_reviews").upsert(
+      {
+        user_id: user.id,
+        path_id: pathId ?? null,
+        media_ref: mediaId,
+        media_title: typeof mediaTitle === "string" ? mediaTitle : null,
+        media_type: typeof mediaType === "string" ? mediaType : null,
+        media_url: typeof mediaUrl === "string" ? mediaUrl : null,
+        rating,
+        sentiment,
+        review:
+          action === "not_for_me"
+            ? "Blocked — don’t show again"
+            : "Not today — deprioritize",
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: "user_id,media_ref" },
+    );
+  }
+
+  return NextResponse.json({ ok: true, blocked: action === "not_for_me" });
 }

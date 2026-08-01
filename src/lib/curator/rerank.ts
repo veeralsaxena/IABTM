@@ -1,5 +1,6 @@
 import type { MediaItem, ScoredMedia } from "@/types";
 import { cosineToUnit } from "@/lib/curator/identity-block";
+import { isMediaBlocked } from "@/lib/curator/blocks";
 
 function clamp01(n: number) {
   return Math.max(0, Math.min(1, n));
@@ -67,7 +68,7 @@ export function rerankCandidates(input: {
   const returner = daysAway >= 2;
 
   return input.candidates
-    .filter((item) => !avoid.has(item.id))
+    .filter((item) => !isMediaBlocked(item, avoid))
     .map((item) => {
       const blob = `${item.title} ${item.description} ${item.creator ?? ""}`;
       const lexicalIdentity = clamp01(

@@ -1,0 +1,417 @@
+{
+  "savedAt": "2026-08-01T18:00:00.000Z",
+  "source": "seed",
+  "latencyMs": 12480,
+  "payload": {
+    "ok": true,
+    "model": "openai/gpt-oss-120b",
+    "latencyMs": 12480,
+    "fromCache": true,
+    "cacheSource": "seed",
+    "steps": {
+      "inputs": {
+        "me": [
+          "Procrastinating",
+          "Anxious",
+          "Scattered"
+        ],
+        "iam": [
+          "Focused",
+          "Disciplined",
+          "Calm"
+        ],
+        "answers": {
+          "vibe": "Scattered",
+          "motivation": "Mentors",
+          "interests": "Entrepreneurs"
+        },
+        "learningStyles": [
+          "Visual",
+          "Kinesthetic"
+        ]
+      },
+      "methodGraph": {
+        "selected": "Stoicism",
+        "blurb": "Train attention and character through deliberate practice under constraint.",
+        "rationale": "Your Me attributes cluster around distraction and worry; Stoicism maps cleanly onto Focused and Disciplined while calming the nervous system through controllable routines.",
+        "ranked": [
+          {
+            "id": "Stoicism",
+            "blurb": "Train attention and character through deliberate practice under constraint.",
+            "score": 6,
+            "fromHits": [
+              "Procrastinating",
+              "Anxious"
+            ],
+            "toHits": [
+              "Focused",
+              "Disciplined"
+            ]
+          },
+          {
+            "id": "Ikigai",
+            "blurb": "Find the intersection of what you love, what you're good at, and what the world needs.",
+            "score": 2,
+            "fromHits": [
+              "Scattered"
+            ],
+            "toHits": [
+              "Focused"
+            ]
+          },
+          {
+            "id": "Atomic Habits",
+            "blurb": "Tiny consistent behaviors compound into identity change.",
+            "score": 2,
+            "fromHits": [
+              "Procrastinating"
+            ],
+            "toHits": [
+              "Disciplined"
+            ]
+          },
+          {
+            "id": "Deep Work",
+            "blurb": "Protect long stretches of undistracted cognitive effort.",
+            "score": 2,
+            "fromHits": [],
+            "toHits": [
+              "Focused",
+              "Disciplined"
+            ]
+          }
+        ],
+        "edges": [
+          {
+            "from": "Procrastinating",
+            "to": "Stoicism",
+            "kind": "me→method"
+          },
+          {
+            "from": "Anxious",
+            "to": "Stoicism",
+            "kind": "me→method"
+          },
+          {
+            "from": "Stoicism",
+            "to": "Focused",
+            "kind": "method→iam"
+          },
+          {
+            "from": "Stoicism",
+            "to": "Disciplined",
+            "kind": "method→iam"
+          }
+        ]
+      },
+      "identityBlock": {
+        "whoIAmNow": "Someone whose days fracture into tabs, half-starts, and low-grade worry about unfinished work.",
+        "whoIAmBecoming": "A person who chooses one hard thing, finishes it, and keeps their nervous system steady under pressure.",
+        "howIGetThere": "Through Stoic practice: shorter focus blocks, controllable routines, and media that models calm discipline over hype.",
+        "rawText": "Who I am now: Someone whose days fracture into tabs, half-starts, and low-grade worry about unfinished work. Who I'm becoming: A person who chooses one hard thing, finishes it, and keeps their nervous system steady under pressure. How I get there: Through Stoic practice: shorter focus blocks, controllable routines, and media that models calm discipline over hype."
+      },
+      "identityQuery": {
+        "text": "Me: Procrastinating, Anxious, Scattered. Becoming: Focused, Disciplined, Calm. Method: Stoicism. Stage: early. Learning styles: Visual, Kinesthetic. Prefer calm practical mentors over hype. Bias toward short actionable film that trains attention.",
+        "note": "Live ranking compares video embeddings to THIS query embedding (Me + I Am + method + stage + learning styles) — same Gemini 768-d space. The stored identity-block embedding is the durable fingerprint; the query embedding is today's ranking target."
+      },
+      "embedding": {
+        "dimensions": 768,
+        "model": "gemini-embedding-001",
+        "blockPreview": [
+          0.012,
+          -0.041,
+          0.088,
+          0.003,
+          -0.067,
+          0.055,
+          0.019,
+          -0.022,
+          0.074,
+          -0.011,
+          0.033,
+          0.048,
+          -0.029,
+          0.061,
+          -0.015,
+          0.027
+        ],
+        "queryPreview": [
+          0.018,
+          -0.036,
+          0.079,
+          0.009,
+          -0.052,
+          0.044,
+          0.021,
+          -0.018,
+          0.066,
+          -0.008,
+          0.029,
+          0.041,
+          -0.024,
+          0.057,
+          -0.012,
+          0.031
+        ],
+        "blockNorm": 1,
+        "queryNorm": 1
+      },
+      "discovery": {
+        "queries": [
+          "stoicism focus discipline short talk",
+          "calm attention training practical routine"
+        ],
+        "plannedAll": {
+          "film": [
+            "stoicism focus discipline short talk",
+            "calm attention training practical routine"
+          ],
+          "music": [
+            "ambient focus instrumental calm"
+          ],
+          "podcast": [
+            "stoic practice daily discipline"
+          ]
+        },
+        "activities": [
+          {
+            "title": "10-minute single-task sprint",
+            "description": "Phone in another room. One task only. Timer on.",
+            "category": "indoor"
+          },
+          {
+            "title": "Walk without headphones",
+            "description": "Notice three controllable things you can act on today.",
+            "category": "outdoor"
+          },
+          {
+            "title": "Share one unfinished task",
+            "description": "Tell a friend the smallest next step and when you'll finish it.",
+            "category": "social"
+          }
+        ],
+        "candidatesFound": 8,
+        "shortlistSize": 8,
+        "shortlistNote": "We do not embed every search hit (cost/latency). First N candidates get Gemini embeddings for cosine vs the live identity-query vector. Everyone still goes through the hybrid reranker with lexical/rules.",
+        "candidates": [
+          {
+            "id": "yt_demo_stoic_01",
+            "title": "How to Stop Overthinking With One Stoic Habit",
+            "description": "A calm walkthrough of dichotomies of control for anxious minds.",
+            "creator": "Practical Philosophy",
+            "url": "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+            "media_type": "film",
+            "duration_minutes": 12,
+            "cosine": 0.81,
+            "shortlisted": true
+          },
+          {
+            "id": "yt_demo_focus_02",
+            "title": "Deep Focus Rituals That Actually Stick",
+            "description": "Short routines for scattered days without motivational fluff.",
+            "creator": "Focus Lab",
+            "url": "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+            "media_type": "film",
+            "duration_minutes": 9,
+            "cosine": 0.76,
+            "shortlisted": true
+          },
+          {
+            "id": "yt_demo_hype_03",
+            "title": "10 MILLIONAIRE MORNING HABITS (YOU NEED THIS)",
+            "description": "High-energy clickbait hustle montage.",
+            "creator": "GrindTV",
+            "url": "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+            "media_type": "film",
+            "duration_minutes": 18,
+            "cosine": 0.41,
+            "shortlisted": true
+          }
+        ]
+      },
+      "ranking": {
+        "note": "Hybrid reranker: cosine(identity-query, video text) when available + lexical attribute/method fit + duration + anti-clickbait. LLM does not pick the winner.",
+        "top": [
+          {
+            "id": "yt_demo_stoic_01",
+            "title": "How to Stop Overthinking With One Stoic Habit",
+            "description": "A calm walkthrough of dichotomies of control for anxious minds.",
+            "creator": "Practical Philosophy",
+            "url": "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+            "media_type": "film",
+            "scores": {
+              "identityFit": 0.84,
+              "stageFit": 0.78,
+              "potential": 0.72,
+              "novelty": 0.66,
+              "antiAttention": 0.91,
+              "final": 0.812
+            },
+            "cosineRaw": 0.742
+          },
+          {
+            "id": "yt_demo_focus_02",
+            "title": "Deep Focus Rituals That Actually Stick",
+            "description": "Short routines for scattered days without motivational fluff.",
+            "creator": "Focus Lab",
+            "url": "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+            "media_type": "film",
+            "scores": {
+              "identityFit": 0.79,
+              "stageFit": 0.81,
+              "potential": 0.7,
+              "novelty": 0.62,
+              "antiAttention": 0.88,
+              "final": 0.771
+            },
+            "cosineRaw": 0.701
+          }
+        ],
+        "whyNow": "This piece models controllable attention instead of hype, which matches early-stage Stoicism for someone moving from scattered anxiety toward focused discipline.",
+        "primaryWhy": "This piece models controllable attention instead of hype, which matches early-stage Stoicism for someone moving from scattered anxiety toward focused discipline."
+      },
+      "orchestration": {
+        "note": "Orchestrated pipeline + one bounded agentic loop (Critic). Method matcher & reranker stay deterministic — not agents.",
+        "agents": [
+          {
+            "id": "orchestrator",
+            "name": "Orchestrator",
+            "brain": "pipeline",
+            "job": "Sequences roles, caches briefing — conductor, not an LLM",
+            "kind": "orchestrator"
+          },
+          {
+            "id": "method",
+            "name": "Method matcher",
+            "brain": "rules",
+            "job": "Attribute↔method overlap scoring — deterministic, NOT an LLM agent",
+            "kind": "rules"
+          },
+          {
+            "id": "identity",
+            "name": "Identity writer",
+            "brain": "Groq",
+            "job": "LLM writes who-now / becoming / how identity block",
+            "kind": "llm"
+          },
+          {
+            "id": "memory",
+            "name": "Memory loader",
+            "brain": "DB",
+            "job": "Loads reviews, blocks, activities into next run",
+            "kind": "tool"
+          },
+          {
+            "id": "planner",
+            "name": "Query planner",
+            "brain": "Groq",
+            "job": "LLM turns identity context into search queries",
+            "kind": "llm"
+          },
+          {
+            "id": "retriever",
+            "name": "Retriever",
+            "brain": "tools",
+            "job": "Live YouTube / web / Spotify discovery",
+            "kind": "tool"
+          },
+          {
+            "id": "critic",
+            "name": "Critic agent",
+            "brain": "Groq",
+            "job": "Observe pass-1 → decide accept|retry → re-search once (the agentic loop)",
+            "kind": "llm"
+          },
+          {
+            "id": "embedder",
+            "name": "Embedder",
+            "brain": "Gemini",
+            "job": "Embeds identity query + shortlist media (768-d)",
+            "kind": "tool"
+          },
+          {
+            "id": "reranker",
+            "name": "Hybrid reranker",
+            "brain": "math",
+            "job": "Scores & picks winners — deterministic, NOT an LLM",
+            "kind": "rules"
+          },
+          {
+            "id": "blocklist",
+            "name": "Hard blocklist",
+            "brain": "DB filter",
+            "job": "Drops blocked yt_/web_ ids before ranking — enforces dislike",
+            "kind": "rules"
+          },
+          {
+            "id": "explainer",
+            "name": "Explainer",
+            "brain": "Groq",
+            "job": "LLM writes why-now after ranking is fixed",
+            "kind": "llm"
+          }
+        ]
+      },
+      "feedbackLoop": {
+        "note": "Two layers: (1) HARD blocklist by media id — guaranteed no re-show of that exact video. (2) Soft live-identity-query text — biases NEXT search/rank toward/away from similar content. Soft is NOT a guarantee for lookalikes.",
+        "affectsLiveIdentityQuery": true,
+        "channels": [
+          {
+            "signal": "1★ / disliked / Don’t show again",
+            "store": "media_reviews blocklist + interactions",
+            "effect": "IMMEDIATE: UI removes that card. PERSISTED: yt_/web_ id hard-filtered on every future Home/Discover run. ALSO: title/reason appended on NEXT identity-query rebuild (soft bias against similar)."
+          },
+          {
+            "signal": "5★ / liked video",
+            "store": "media_reviews + interactions",
+            "effect": "Soft only: liked titles enter next identity query + rerank boost. No hard ‘must show’."
+          },
+          {
+            "signal": "Completed activity",
+            "store": "check_ins (Completed activity: …)",
+            "effect": "Soft: next identity query prefers media that deepens those practices"
+          },
+          {
+            "signal": "Skipped activity",
+            "store": "check_ins (Skipped activity: …)",
+            "effect": "Soft: next identity query asks for gentler alternatives"
+          },
+          {
+            "signal": "Disliked artist",
+            "store": "artist_feedback",
+            "effect": "HARD for Artists page (hidden). Soft in identity query (‘Avoid these mentors…’). Does not block unrelated YouTube ids."
+          },
+          {
+            "signal": "Changed Me / I Am attributes",
+            "store": "paths + identity_embedding rebuild",
+            "effect": "Full re-curate: new method, new identity block, invalidate briefing"
+          }
+        ],
+        "simulatedAfterDislike": {
+          "dislikedTitle": "How to Stop Overthinking With One Stoic Habit",
+          "nextIdentityQuerySnippet": "Me: Procrastinating, Anxious, Scattered. Becoming: Focused, Disciplined, Calm. Method: Stoicism. User rated low / disliked — DO NOT recommend similar: How to Stop Overthinking With One Stoic Habit. Why they disliked: Rated 1/5 — didn’t land.",
+          "avoidId": "yt_demo_stoic_01"
+        }
+      },
+      "agentLoop": {
+        "kind": "critic_research",
+        "note": "This is the real agentic hop: Observe pass-1 titles → Reason (Groq Critic) → Decide accept|retry → Act (re-search once). Ranking stays math. Fail-open if critic errors.",
+        "observed": "Pass-1 had practical stoic titles with little hype; coverage was decent.",
+        "decision": "accept",
+        "reason": "First pass already serves early Stoicism with calm practical film — no retry needed.",
+        "heuristicsTriggered": [],
+        "pass1Queries": [
+          "stoicism focus discipline short talk",
+          "calm attention training practical routine"
+        ],
+        "revisedQueries": [
+          "stoic attention training short talk",
+          "discipline without hustle practical video"
+        ],
+        "pass1Candidates": 8,
+        "pass2Added": 0,
+        "mergedCandidates": 8
+      }
+    }
+  }
+}

@@ -17,6 +17,9 @@ export async function buildIdentityQuery(input: {
   dislikedReasons?: string[];
   /** Calendar gap since last activity (returner) */
   daysAway?: number;
+  avoidedArtists?: string[];
+  preferredArtists?: string[];
+  skippedActivities?: string[];
 }): Promise<{
   query: string;
   embedding: number[];
@@ -40,6 +43,11 @@ export async function buildIdentityQuery(input: {
         ? `User missed ${daysAway} days. Soft re-entry — practical and brief.`
         : "";
 
+  const skipGuidance =
+    input.skippedActivities?.length
+      ? `User skipped these activities: ${input.skippedActivities.join("; ")}. Prefer gentler alternatives; do not push the same intensity.`
+      : "";
+
   const query = [
     `Current self: ${input.path.me_labels.join(", ")}.`,
     `Imagined self: ${input.path.iam_labels.join(", ")}.`,
@@ -47,6 +55,7 @@ export async function buildIdentityQuery(input: {
     `Journey day ${input.path.day_number} of ${input.path.total_days} (${stage}).`,
     stageGuidance,
     returnerGuidance,
+    skipGuidance,
     input.learningStyles?.length
       ? `Preferred learning styles: ${input.learningStyles.join(", ")}.`
       : "",
@@ -62,6 +71,12 @@ export async function buildIdentityQuery(input: {
       : "",
     input.dislikedReasons?.length
       ? `Why they disliked (human-in-the-loop reasons): ${input.dislikedReasons.join("; ")}. Avoid those mismatch patterns.`
+      : "",
+    input.preferredArtists?.length
+      ? `Preferred mentors/artists: ${input.preferredArtists.join(", ")}. Bias toward related voices.`
+      : "",
+    input.avoidedArtists?.length
+      ? `Avoid these mentors/artists: ${input.avoidedArtists.join(", ")}.`
       : "",
     input.resonatedTopics?.length
       ? `User resonated with: ${input.resonatedTopics.join(", ")}. Bias toward similar tone and depth.`

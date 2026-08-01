@@ -4,6 +4,17 @@ import { cosineSimilarity } from "@/lib/curator/identity-block";
 import { planDiscoveryQueries } from "@/lib/curator/query-planner";
 import { diversifyTypes, rerankCandidates } from "@/lib/curator/rerank";
 import { discoverForType, toMediaItem } from "@/lib/curator/web-search";
+import {
+  collectBlockKeys,
+  filterBlockedMedia,
+  pickEmbedShortlist,
+} from "@/lib/curator/blocks";
+import {
+  heuristicRetrySignals,
+  mergeMediaById,
+  observeDiscoveryPass,
+  runCuratorCritic,
+} from "@/lib/curator/critic-agent";
 import { embedText } from "@/lib/ai/embeddings";
 import { groqJson, GROQ_MODEL } from "@/lib/ai/groq";
 import type {
@@ -39,35 +50,46 @@ async function fetchSeenIds(userId: string, pathId: string) {
 
 /**
  * Agentic memory / human-in-the-loop:
- * reviews + interactions + activities reshape the next identity query & rerank.
+ * reviews + interactions + activities + artist feedback reshape the next run.
+ * Hard blocklist = disliked media_refs (not just soft negatives in the query).
  */
 async function fetchBehaviorSignals(userId: string, pathId: string) {
   const supabase = await createClient();
-  const [{ data: checkIns }, { data: interactions }, { data: reviews }] =
-    await Promise.all([
-      supabase
-        .from("check_ins")
-        .select("body, created_at")
-        .eq("user_id", userId)
-        .order("created_at", { ascending: false })
-        .limit(20),
-      supabase
-        .from("interactions")
-        .select("action, created_at")
-        .eq("user_id", userId)
-        .eq("path_id", pathId)
-        .in("action", ["resonated", "not_for_me", "viewed", "completed"])
-        .order("created_at", { ascending: false })
-        .limit(40),
-      supabase
-        .from("media_reviews")
-        .select(
-          "media_ref, media_title, media_type, rating, sentiment, review, updated_at",
-        )
-        .eq("user_id", userId)
-        .order("updated_at", { ascending: false })
-        .limit(30),
-    ]);
+  const [
+    { data: checkIns },
+    { data: interactions },
+    { data: reviews },
+    { data: artistFb },
+  ] = await Promise.all([
+    supabase
+      .from("check_ins")
+      .select("body, created_at")
+      .eq("user_id", userId)
+      .order("created_at", { ascending: false })
+      .limit(30),
+    supabase
+      .from("interactions")
+      .select("action, created_at")
+      .eq("user_id", userId)
+      .eq("path_id", pathId)
+      .in("action", ["resonated", "not_for_me", "viewed", "completed"])
+      .order("created_at", { ascending: false })
+      .limit(40),
+    supabase
+      .from("media_reviews")
+      .select(
+        "media_ref, media_title, media_type, media_url, rating, sentiment, review, updated_at",
+      )
+      .eq("user_id", userId)
+      .order("updated_at", { ascending: false })
+      .limit(50),
+    supabase
+      .from("artist_feedback")
+      .select("artist_id, artist_name, rating, sentiment, note, updated_at")
+      .eq("user_id", userId)
+      .order("updated_at", { ascending: false })
+      .limit(20),
+  ]);
 
   const completedActivities = (checkIns ?? [])
     .map((c) => c.body as string)
@@ -76,11 +98,23 @@ async function fetchBehaviorSignals(userId: string, pathId: string) {
     .filter(Boolean)
     .slice(0, 8);
 
+  const skippedActivities = (checkIns ?? [])
+    .map((c) => c.body as string)
+    .filter((b) => b?.startsWith("Skipped activity:"))
+    .map((b) => b.replace("Skipped activity:", "").trim())
+    .filter(Boolean)
+    .slice(0, 8);
+
   const liked = (reviews ?? []).filter(
     (r) => r.sentiment === "liked" || (r.rating ?? 0) >= 4,
   );
   const disliked = (reviews ?? []).filter(
-    (r) => r.sentiment === "disliked" || (r.rating ?? 0) <= 2,
+    (r) =>
+      r.sentiment === "disliked" ||
+      (r.rating ?? 0) <= 2 ||
+      String(r.review ?? "").toLowerCase().includes("don’t show again") ||
+      String(r.review ?? "").toLowerCase().includes("don't show again") ||
+      String(r.review ?? "").toLowerCase().includes("blocked"),
   );
 
   const likedTitles = liked
@@ -95,9 +129,23 @@ async function fetchBehaviorSignals(userId: string, pathId: string) {
     .map((r) => (r.review as string)?.trim())
     .filter(Boolean)
     .slice(0, 5) as string[];
-  const avoidIds = new Set(
+
+  const blockKeys = collectBlockKeys(
     disliked.map((r) => r.media_ref as string).filter(Boolean),
+    disliked.map((r) => r.media_url as string | null),
   );
+
+  const avoidedArtists = (artistFb ?? [])
+    .filter((a) => a.sentiment === "disliked" || (a.rating ?? 0) <= 2)
+    .map((a) => (a.artist_name as string) || (a.artist_id as string))
+    .filter(Boolean)
+    .slice(0, 6);
+
+  const preferredArtists = (artistFb ?? [])
+    .filter((a) => a.sentiment === "liked" || (a.rating ?? 0) >= 4)
+    .map((a) => (a.artist_name as string) || (a.artist_id as string))
+    .filter(Boolean)
+    .slice(0, 6);
 
   const resonatedCount =
     interactions?.filter((i) => i.action === "resonated").length ?? 0;
@@ -115,10 +163,13 @@ async function fetchBehaviorSignals(userId: string, pathId: string) {
 
   return {
     completedActivities,
+    skippedActivities,
     likedTitles,
     dislikedTitles,
     dislikedReasons,
-    avoidIds,
+    avoidIds: blockKeys,
+    avoidedArtists,
+    preferredArtists,
     lastActivityAt: lastTs ?? null,
     resonatedTopics:
       likedTitles.length > 0
@@ -281,6 +332,9 @@ export async function runCuratorPipeline(input: {
     dislikedTitles: behavior.dislikedTitles,
     dislikedReasons: behavior.dislikedReasons,
     daysAway: effectiveDaysAway,
+    avoidedArtists: behavior.avoidedArtists,
+    preferredArtists: behavior.preferredArtists,
+    skippedActivities: behavior.skippedActivities,
   });
 
   const [plan, seenIds] = await Promise.all([
@@ -289,19 +343,91 @@ export async function runCuratorPipeline(input: {
       stage: identity.stage,
       learningStyles,
       checkIn: input.checkIn,
+      avoidHints: [
+        ...behavior.dislikedTitles.slice(0, 4),
+        ...behavior.dislikedReasons.slice(0, 3),
+        ...behavior.avoidedArtists.slice(0, 3),
+        ...behavior.skippedActivities.slice(0, 2),
+      ],
+      preferHints: [
+        ...behavior.likedTitles.slice(0, 4),
+        ...behavior.preferredArtists.slice(0, 3),
+        ...behavior.completedActivities.slice(0, 2),
+      ],
     }),
     fetchSeenIds(input.userId, input.path.id),
   ]);
 
-  // Also treat low-rated refs as "seen" so novelty penalizes them
+  // Blocked ids also count as "seen" for novelty
   for (const id of behavior.avoidIds) seenIds.add(id);
 
-  const discovered = await discoverAcrossTypes({
+  const discoveredRaw = await discoverAcrossTypes({
     path: input.path,
     stage: identity.stage,
     learningStyles,
     queriesByType: plan.queriesByType,
   });
+
+  // HARD FILTER — blocked media never enter ranking (query text alone is not enough)
+  let discovered = filterBlockedMedia(discoveredRaw, behavior.avoidIds);
+  const pass1Count = discovered.length;
+
+  const queriesUsed = Object.values(plan.queriesByType)
+    .flat()
+    .filter(Boolean) as string[];
+
+  const observation = observeDiscoveryPass({
+    candidates: discovered,
+    queriesUsed,
+    dislikedTitles: behavior.dislikedTitles,
+    likedTitles: behavior.likedTitles,
+  });
+  const heuristicsTriggered = heuristicRetrySignals(observation);
+
+  // --- Agentic loop (bounded): Observe → Reason → Decide → Act (max 1 retry) ---
+  const critic = await runCuratorCritic({
+    me: input.path.me_labels,
+    iam: input.path.iam_labels,
+    method: input.path.method,
+    stage: identity.stage,
+    identityQuery: identity.query,
+    observation,
+  });
+
+  let pass2Added = 0;
+  let agentDecision: "accept" | "retry" = "accept";
+  let finalQueriesByType = plan.queriesByType;
+
+  if (critic.needsRetry) {
+    agentDecision = "retry";
+    const retryQueries = {
+      ...plan.queriesByType,
+      ...(critic.revisedQueriesByType ?? {}),
+      film:
+        critic.revisedQueriesByType?.film?.length
+          ? critic.revisedQueriesByType.film
+          : critic.revisedFilmQueries.length
+            ? critic.revisedFilmQueries
+            : plan.queriesByType.film,
+    };
+    finalQueriesByType = retryQueries;
+
+    try {
+      const pass2Raw = await discoverAcrossTypes({
+        path: input.path,
+        stage: identity.stage,
+        learningStyles,
+        queriesByType: retryQueries,
+      });
+      const pass2 = filterBlockedMedia(pass2Raw, behavior.avoidIds);
+      const before = new Set(discovered.map((d) => d.id));
+      discovered = mergeMediaById(discovered, pass2);
+      pass2Added = discovered.filter((d) => !before.has(d.id)).length;
+    } catch (e) {
+      console.error("critic retry discovery failed — keeping pass 1", e);
+      agentDecision = "accept";
+    }
+  }
 
   if (!discovered.length) {
     throw new Error(
@@ -312,6 +438,11 @@ export async function runCuratorPipeline(input: {
   const vectorScores = await vectorScoreCandidates(
     identity.embedding,
     discovered,
+    {
+      me: input.path.me_labels,
+      iam: input.path.iam_labels,
+      method: input.path.method,
+    },
   );
 
   const ranked = rerankCandidates({
@@ -357,7 +488,7 @@ export async function runCuratorPipeline(input: {
     discovery: {
       source: "web",
       queries: Object.fromEntries(
-        Object.entries(plan.queriesByType).map(([k, v]) => [k, v ?? []]),
+        Object.entries(finalQueriesByType).map(([k, v]) => [k, v ?? []]),
       ),
       candidatesFound: discovered.length,
     },
@@ -371,7 +502,7 @@ export async function runCuratorPipeline(input: {
         final: Number(d.scores.final.toFixed(3)),
       })),
       method: input.path.method,
-      model: `${GROQ_MODEL} + gemini-embedding + youtube/spotify discovery + hybrid reranker + HITL feedback`,
+      model: `${GROQ_MODEL} + gemini-embedding + critic-agent + youtube/spotify + hybrid reranker + HITL`,
       latencyMs: Date.now() - started,
       discoverySource: Object.keys(vectorScores).length
         ? "youtube+spotify+vector+reviews"
@@ -379,6 +510,17 @@ export async function runCuratorPipeline(input: {
       daysAway: effectiveDaysAway,
       avoidedFromReviews: behavior.avoidIds.size,
       likedFromReviews: behavior.likedTitles.length,
+      agentLoop: {
+        kind: "critic_research",
+        observed: critic.observation,
+        decision: agentDecision,
+        reason: critic.reason,
+        heuristicsTriggered,
+        revisedQueries: critic.revisedFilmQueries,
+        pass1Candidates: pass1Count,
+        pass2Added: agentDecision === "retry" ? pass2Added : undefined,
+        mergedCandidates: discovered.length,
+      },
     },
   };
 }
@@ -386,11 +528,14 @@ export async function runCuratorPipeline(input: {
 async function vectorScoreCandidates(
   identityEmbedding: number[] | null,
   candidates: MediaItem[],
+  ctx?: { me: string[]; iam: string[]; method: string },
 ): Promise<Record<string, number>> {
   if (!identityEmbedding?.length || !candidates.length) return {};
   const scores: Record<string, number> = {};
-  // Embed a shortlist only — keep latency/quota bounded
-  const shortlist = candidates.slice(0, 12);
+  // Lexical pre-rank then embed top N — better than arbitrary first-12
+  const shortlist = ctx
+    ? pickEmbedShortlist(candidates, ctx.me, ctx.iam, ctx.method, 12)
+    : candidates.slice(0, 12);
   for (const item of shortlist) {
     try {
       const emb = await embedText(
@@ -411,6 +556,8 @@ export async function discoverCategory(input: {
   mediaType: MediaType;
   learningStyles?: string[];
 }) {
+  const behavior = await fetchBehaviorSignals(input.userId, input.path.id);
+
   let stage: "early" | "middle" | "late" | "any" = "early";
   let identityQuery = `${input.path.me_labels.join(" ")} ${input.path.iam_labels.join(" ")} ${input.path.method}`;
   let identityEmbedding: number[] | null = null;
@@ -423,6 +570,15 @@ export async function discoverCategory(input: {
     const identity = await buildIdentityQuery({
       path: input.path,
       learningStyles: input.learningStyles,
+      completedActivities: behavior.completedActivities,
+      likedTitles: behavior.likedTitles,
+      dislikedTitles: behavior.dislikedTitles,
+      dislikedReasons: behavior.dislikedReasons,
+      avoidedArtists: behavior.avoidedArtists,
+      preferredArtists: behavior.preferredArtists,
+      skippedActivities: behavior.skippedActivities,
+      resonatedTopics: behavior.resonatedTopics,
+      rejectedTopics: behavior.rejectedTopics,
     });
     stage = identity.stage;
     identityQuery = identity.query;
@@ -436,6 +592,15 @@ export async function discoverCategory(input: {
       path: input.path,
       stage,
       learningStyles: input.learningStyles,
+      avoidHints: [
+        ...behavior.dislikedTitles.slice(0, 4),
+        ...behavior.dislikedReasons.slice(0, 3),
+        ...behavior.avoidedArtists.slice(0, 3),
+      ],
+      preferHints: [
+        ...behavior.likedTitles.slice(0, 4),
+        ...behavior.preferredArtists.slice(0, 3),
+      ],
     });
     queries = plan.queriesByType[input.mediaType] ?? queries;
   } catch {
@@ -447,7 +612,7 @@ export async function discoverCategory(input: {
     queries,
   });
 
-  const candidates = found.map((c) =>
+  const candidatesRaw = found.map((c) =>
     toMediaItem(c, {
       me: input.path.me_labels,
       iam: input.path.iam_labels,
@@ -457,10 +622,19 @@ export async function discoverCategory(input: {
     }),
   );
 
+  const candidates = filterBlockedMedia(candidatesRaw, behavior.avoidIds);
+
   const seenIds = await fetchSeenIds(input.userId, input.path.id);
+  for (const id of behavior.avoidIds) seenIds.add(id);
+
   const vectorScores = await vectorScoreCandidates(
     identityEmbedding,
     candidates,
+    {
+      me: input.path.me_labels,
+      iam: input.path.iam_labels,
+      method: input.path.method,
+    },
   );
 
   return rerankCandidates({
@@ -473,5 +647,8 @@ export async function discoverCategory(input: {
     seenIds,
     identityQuery,
     vectorScores,
+    avoidIds: behavior.avoidIds,
+    dislikedTitles: behavior.dislikedTitles,
+    likedTitles: behavior.likedTitles,
   });
 }

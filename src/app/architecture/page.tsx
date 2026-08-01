@@ -1,119 +1,101 @@
 import Link from "next/link";
+import { SystemArchitectureCanvas } from "@/components/architecture/SystemArchitectureCanvas";
 
 export default function ArchitecturePage() {
   return (
-    <div className="min-h-screen bg-[#faf9f7] text-zinc-900">
-      <div className="mx-auto max-w-3xl px-5 py-10 md:px-8">
-        <div className="mb-10 flex items-center justify-between">
-          <Link href="/" className="font-display text-2xl font-bold">
+    <div className="min-h-screen bg-[#050506] text-zinc-100">
+      <div className="pointer-events-none fixed inset-0 bg-[radial-gradient(ellipse_at_top,rgba(20,24,28,0.9),#050506_55%)]" />
+
+      <div className="relative mx-auto max-w-6xl px-4 py-8 sm:px-6 sm:py-10">
+        <div className="mb-8 flex flex-wrap items-center justify-between gap-3">
+          <Link href="/" className="font-display text-2xl font-bold text-white">
             Vector
           </Link>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <Link
               href="/demo"
-              className="rounded-full border border-zinc-200 bg-white px-4 py-2 text-sm font-medium text-zinc-800"
+              className="rounded-full border border-white/15 bg-white/5 px-4 py-2 text-sm font-medium text-zinc-100 hover:bg-white/10"
             >
               Live demo
             </Link>
             <Link
               href="/login"
-              className="rounded-full bg-zinc-900 px-4 py-2 text-sm text-white"
+              className="rounded-full bg-white px-4 py-2 text-sm font-semibold text-zinc-900"
             >
               Open app
             </Link>
           </div>
         </div>
 
-        <h1 className="font-display text-4xl font-bold tracking-tight md:text-5xl">
-          System design
-        </h1>
-        <p className="mt-4 text-lg leading-relaxed text-zinc-500">
-          Hybrid retrieval: identity block → Gemini embedding (pgvector-ready)
-          → live web discovery → vector + lexical rerank → explain → adapt.
-        </p>
-
-        <ol className="mt-10 space-y-4">
-          {[
-            [
-              "Inputs",
-              "Me / I Am attributes, questions, learning styles, check-ins, completed activities, resonance / rejection.",
-            ],
-            [
-              "Identity block",
-              "Three answers — who I am now, who I’m becoming, how I get there — concatenated and embedded with Gemini (768-d). Stored on the path as identity_embedding for pgvector.",
-            ],
-            [
-              "Query planner (Groq)",
-              "Writes search queries per media type and proposes outdoor / indoor / social activities.",
-            ],
-            [
-              "Web discovery",
-              "Live YouTube + Spotify embeds (+ DuckDuckGo when reachable). Tabs are session-cached.",
-            ],
-            [
-              "Hybrid rerank + human-in-the-loop",
-              "Cosine + lexical rules choose winners. Low ratings / written reviews are stored and used next run: avoid those titles, boost liked ones, and inject dislike reasons into the identity query. LLM does not pick the winner.",
-            ],
-            [
-              "Explain + act (ReAct loop)",
-              "Observe feedback → Reason (identity + planner) → Act (retrieve/rerank) → Explain → user rates again. That is the closed Reason–Act cycle.",
-            ],
-            [
-              "Return after absence",
-              "If away 2+ days: advance path day, invalidate stale briefing, prefer shorter re-entry content.",
-            ],
-            [
-              "Adapt",
-              "Attribute changes rebuild method + invalidate today’s briefing. Behavior signals reshape tomorrow’s search.",
-            ],
-          ].map(([t, d], i) => (
-            <li
-              key={t}
-              className="rounded-2xl border border-zinc-200 bg-white p-5"
-            >
-              <div className="text-xs uppercase tracking-[0.14em] text-zinc-400">
-                Step {i + 1}
-              </div>
-              <div className="mt-1 text-xl font-semibold">{t}</div>
-              <p className="mt-2 text-sm leading-relaxed text-zinc-500">{d}</p>
-            </li>
-          ))}
-        </ol>
-
-        <div className="mt-8 rounded-2xl bg-zinc-900 p-5 text-sm leading-relaxed text-zinc-300">
-          <div className="font-semibold text-white">
-            Why not lexical-only? Why not pgvector-only?
+        <div className="mb-8 max-w-3xl">
+          <div className="text-[11px] uppercase tracking-[0.18em] text-zinc-500">
+            System design
           </div>
-          <p className="mt-2">
-            Lexical overlap alone misses synonyms (“procrastinating” vs “putting
-            things off”). Pure pgvector alone needs a pre-indexed catalog —
-            live web candidates aren’t in Postgres until we embed them. Best
-            production pattern: store the identity vector in Supabase pgvector,
-            discover from the web, embed the shortlist, score with cosine +
-            rules. That is what this stack does.
+          <h1 className="mt-2 font-display text-4xl font-bold tracking-tight text-white md:text-5xl">
+            How Vector actually decides
+          </h1>
+          <p className="mt-4 text-base leading-relaxed text-zinc-400 md:text-lg">
+            Orchestrated pipeline with one real agentic hop: the{" "}
+            <span className="text-teal-200">Critic Agent</span> observes the
+            first search, decides accept or retry, and can re-search once.
+            Method matching and ranking stay deterministic on purpose. Step
+            through with Prev / Next — this view does not re-run the pipeline.
           </p>
         </div>
 
-        <div className="mt-8 rounded-2xl border border-zinc-200 bg-white p-5">
-          <div className="font-semibold">UI shell decisions</div>
-          <ul className="mt-3 space-y-2 text-sm leading-relaxed text-zinc-500">
-            <li>
-              <strong className="text-zinc-800">240→64 left rail</strong> —
-              industry dashboard default; collapse for focus on the primary pick.
-            </li>
-            <li>
-              <strong className="text-zinc-800">280px right panel, hidable</strong> —
-              activities are secondary; main column owns attention.
-            </li>
-            <li>
-              <strong className="text-zinc-800">Top-right notifications</strong> —
-              path signals live in the header (F-pattern), not in the briefing.
-            </li>
-            <li>
-              <strong className="text-zinc-800">Main max-width ~64rem</strong> —
-              readable measure; avoids stretched empty middle on wide screens.
-            </li>
+        <SystemArchitectureCanvas />
+
+        <div className="mt-10 grid gap-4 md:grid-cols-3">
+          {[
+            {
+              t: "Why hybrid?",
+              d: "Lexical alone misses synonyms. Pure pgvector needs a pre-indexed catalog. Live web candidates aren’t in Postgres until we embed the shortlist — so we discover, embed, then cosine + rules.",
+            },
+            {
+              t: "What’s “agentic” here?",
+              d: "The Critic Agent: Observe pass-1 → Reason → Decide accept|retry → Act (revised search, max once). Fail-open if it errors. Everything else is LLM roles, tools, or rules — labeled honestly.",
+            },
+            {
+              t: "Feedback that sticks",
+              d: "Hard: exact yt_/web_ ids filtered forever. Soft: disliked titles rewrite the next live identity query. UI removes the card immediately; soft text refreshes on the next curate.",
+            },
+          ].map((c) => (
+            <div
+              key={c.t}
+              className="rounded-2xl border border-white/10 bg-white/[0.03] p-5"
+            >
+              <div className="font-semibold text-white">{c.t}</div>
+              <p className="mt-2 text-sm leading-relaxed text-zinc-400">{c.d}</p>
+            </div>
+          ))}
+        </div>
+
+        <div className="mt-8 rounded-2xl border border-white/10 bg-gradient-to-br from-white/[0.06] to-transparent p-6">
+          <div className="font-display text-xl font-bold text-white">
+            Stack (production-shaped)
+          </div>
+          <ul className="mt-4 grid gap-2 text-sm text-zinc-400 sm:grid-cols-2">
+            <li>Next.js app + Supabase Auth / Postgres</li>
+            <li>Groq (`openai/gpt-oss-120b`) for writers</li>
+            <li>Gemini `embedding-001` · 768-d</li>
+            <li>Live YouTube / DuckDuckGo / Spotify discovery</li>
+            <li>Daily briefing cache + path identity_embedding</li>
+            <li>media_reviews hard blocklist by stable id</li>
           </ul>
+          <div className="mt-5 flex flex-wrap gap-2">
+            <Link
+              href="/demo"
+              className="rounded-full bg-teal-400 px-4 py-2 text-sm font-semibold text-zinc-950"
+            >
+              Run live demo (cached fallback ready)
+            </Link>
+            <Link
+              href="/home"
+              className="rounded-full border border-white/15 px-4 py-2 text-sm text-zinc-200"
+            >
+              Open product
+            </Link>
+          </div>
         </div>
       </div>
     </div>
