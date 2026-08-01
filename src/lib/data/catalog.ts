@@ -100,7 +100,7 @@ export const METHODS = [
 ] as const;
 
 export function pickMethod(me: string[], iam: string[]) {
-  let best = METHODS[0];
+  let best: (typeof METHODS)[number] = METHODS[0];
   let bestScore = -1;
 
   for (const method of METHODS) {
