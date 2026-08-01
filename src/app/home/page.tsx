@@ -6,6 +6,7 @@ import { DashboardShell } from "@/components/DashboardShell";
 import { StatusPanel } from "@/components/StatusPanel";
 import { MediaPlayer } from "@/components/MediaPlayer";
 import { MediaReviewPanel } from "@/components/MediaReviewPanel";
+import { IdentityVectorMap } from "@/components/IdentityVectorMap";
 import {
   PostCard,
   PostComposer,
@@ -349,6 +350,18 @@ export default function HomePage() {
               Your past low ratings still block similar content.
             </p>
           </div>
+        )}
+
+        {data && !loading && (
+          <IdentityVectorMap
+            me={data.path.me_labels}
+            iam={data.path.iam_labels}
+            method={data.path.method}
+            dayNumber={data.path.day_number}
+            totalDays={data.path.total_days}
+            scores={data.briefing.primary.scores}
+            mediaTitle={data.briefing.primary.title}
+          />
         )}
 
         {/* Today’s curated pick stays on home */}

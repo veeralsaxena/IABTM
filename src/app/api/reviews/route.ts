@@ -63,12 +63,16 @@ export async function POST(request: Request) {
   if (!["liked", "disliked", "mixed"].includes(sentiment)) {
     return NextResponse.json({ error: "Pick liked / disliked / mixed" }, { status: 400 });
   }
-  if (review.length < 3) {
-    return NextResponse.json(
-      { error: "Write a short review (why it landed or didn’t)." },
-      { status: 400 },
-    );
-  }
+
+  // Stars alone are enough — written review is optional human-in-the-loop detail
+  const reviewText =
+    review.length >= 1
+      ? review
+      : sentiment === "disliked" || rating <= 2
+        ? `Rated ${rating}/5 — didn’t land`
+        : sentiment === "liked" || rating >= 4
+          ? `Rated ${rating}/5 — resonated`
+          : `Rated ${rating}/5 — mixed`;
 
   const row = {
     user_id: user.id,
@@ -79,7 +83,7 @@ export async function POST(request: Request) {
     media_url: typeof body.mediaUrl === "string" ? body.mediaUrl : null,
     rating,
     sentiment,
-    review,
+    review: reviewText,
     updated_at: new Date().toISOString(),
   };
 

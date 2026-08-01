@@ -15,7 +15,7 @@ const manrope = Manrope({
 });
 
 export const metadata: Metadata = {
-  title: "CURATE — Media for who you're becoming",
+  title: "Vector — Media for who you're becoming",
   description:
     "An agentic curator that picks media for human potential — identity, method, and timing — not attention.",
 };

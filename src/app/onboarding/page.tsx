@@ -162,7 +162,7 @@ function OnboardingInner() {
     <div className="min-h-screen bg-white text-zinc-900">
       <header className="mx-auto flex max-w-6xl items-center justify-between px-5 py-5">
         <div>
-          <div className="font-display text-2xl font-bold">CURATE</div>
+          <div className="font-display text-2xl font-bold">Vector</div>
           <div className="text-[10px] uppercase tracking-[0.18em] text-zinc-400">
             {isNewPath ? "Add another path" : "Build your path"}
           </div>

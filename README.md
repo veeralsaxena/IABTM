@@ -1,8 +1,8 @@
-# CURATE
+# Vector
 
 Daily media for who you're becoming. Discovered live from the web, ranked for potential instead of attention.
 
-CURATE is an agentic media curator. You describe who you are now and who you want to become, pick a method for getting there, and each day the system finds film, podcasts, people, writing, music, and practice activities that fit that path. Ranking optimizes for identity fit and growth, not engagement.
+Vector is an agentic media curator. You describe who you are now and who you want to become, pick a method for getting there, and each day the system finds film, podcasts, people, writing, music, and practice activities that fit that path. Ranking optimizes for identity fit and growth, not engagement.
 
 ---
 

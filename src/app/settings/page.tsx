@@ -476,7 +476,7 @@ export default function SettingsPage() {
         {!loading && tab === "feedback" && (
           <section className="space-y-5">
             <div className="rounded-2xl border border-zinc-200 bg-white p-5">
-              <h2 className="text-lg font-semibold">How your feedback trains CURATE</h2>
+              <h2 className="text-lg font-semibold">How your feedback trains Vector</h2>
               <p className="mt-2 text-sm leading-relaxed text-zinc-500">
                 Low ratings and “not for me” notes are stored and injected into
                 the next identity query + reranker. Disliked media is hard-avoided;

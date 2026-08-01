@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { useRouter } from "next/navigation";
+import { ArrowLeft } from "lucide-react";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -97,12 +98,21 @@ export default function LoginPage() {
       </div>
 
       <div className="flex flex-col justify-center px-5 py-12 md:px-12">
-        <Link href="/" className="mb-10">
-          <div className="font-display text-2xl font-bold">CURATE</div>
-          <div className="text-[10px] uppercase tracking-[0.18em] text-zinc-400">
-            Sign in to continue
-          </div>
-        </Link>
+        <div className="mb-8 flex items-start justify-between gap-3">
+          <Link href="/" className="min-w-0">
+            <div className="font-display text-2xl font-bold">Vector</div>
+            <div className="text-[10px] uppercase tracking-[0.18em] text-zinc-400">
+              Sign in to continue
+            </div>
+          </Link>
+          <Link
+            href="/"
+            className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-zinc-200 bg-white px-3 py-1.5 text-xs font-medium text-zinc-600 hover:border-zinc-400 hover:text-zinc-900"
+          >
+            <ArrowLeft className="h-3.5 w-3.5" />
+            Back to home
+          </Link>
+        </div>
 
         <div className="rounded-3xl border border-zinc-200 bg-white p-6 shadow-sm md:p-8">
           <div className="mb-6 flex rounded-full border border-zinc-200 p-1">

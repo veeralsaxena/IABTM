@@ -6,14 +6,22 @@ export default function ArchitecturePage() {
       <div className="mx-auto max-w-3xl px-5 py-10 md:px-8">
         <div className="mb-10 flex items-center justify-between">
           <Link href="/" className="font-display text-2xl font-bold">
-            CURATE
+            Vector
           </Link>
-          <Link
-            href="/login"
-            className="rounded-full bg-zinc-900 px-4 py-2 text-sm text-white"
-          >
-            Open app
-          </Link>
+          <div className="flex items-center gap-2">
+            <Link
+              href="/demo"
+              className="rounded-full border border-zinc-200 bg-white px-4 py-2 text-sm font-medium text-zinc-800"
+            >
+              Live demo
+            </Link>
+            <Link
+              href="/login"
+              className="rounded-full bg-zinc-900 px-4 py-2 text-sm text-white"
+            >
+              Open app
+            </Link>
+          </div>
         </div>
 
         <h1 className="font-display text-4xl font-bold tracking-tight md:text-5xl">

@@ -23,6 +23,7 @@ import {
   Route,
   Settings,
   UserRound,
+  Workflow,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
@@ -41,6 +42,7 @@ const nav = [
   { href: "/paths", label: "Your paths", icon: Route },
   { href: "/settings", label: "Settings", icon: Settings },
   { href: "/architecture", label: "How it works", icon: Compass },
+  { href: "/demo", label: "Live demo", icon: Workflow },
 ];
 const LEFT_DEFAULT = 240;
 const LEFT_MIN = 180;
@@ -204,7 +206,7 @@ export function DashboardShell({
         pathname === n.href ||
         (n.href !== "/home" && pathname.startsWith(n.href)),
     )?.label ||
-    "CURATE";
+    "Vector";
 
   const leftWidth = left.collapsed ? LEFT_COLLAPSED : leftSize.width;
 
@@ -228,7 +230,7 @@ export function DashboardShell({
             {!left.collapsed && (
               <Link href="/home" className="min-w-0 px-1">
                 <div className="font-display text-xl font-bold tracking-tight">
-                  CURATE
+                  Vector
                 </div>
                 <div className="truncate text-[9px] uppercase tracking-[0.14em] text-zinc-400">
                   potential · not attention
@@ -332,7 +334,7 @@ export function DashboardShell({
           <header className="sticky top-0 z-30 flex h-14 items-center justify-between gap-3 border-b border-zinc-200 bg-white/95 px-3 backdrop-blur sm:px-5">
             <div className="flex min-w-0 items-center gap-2">
               <div className="font-display text-base font-bold md:hidden">
-                CURATE
+                Vector
               </div>
               <div className="hidden truncate text-sm font-semibold text-zinc-800 sm:block">
                 {pageTitle}

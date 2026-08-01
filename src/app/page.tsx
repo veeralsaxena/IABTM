@@ -16,19 +16,25 @@ export default function LandingPage() {
         <div className="mx-auto flex max-w-6xl items-center justify-between px-5 py-6 md:px-8">
           <div>
             <div className="font-display text-2xl font-bold tracking-tight">
-              CURATE
+              Vector
             </div>
             <div className="text-[10px] uppercase tracking-[0.2em] text-zinc-500">
               become the self you imagine
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <Link
-              href="/architecture"
-              className="hidden rounded-full px-4 py-2 text-sm text-zinc-600 hover:text-zinc-900 sm:inline"
-            >
-              How it works
-            </Link>
+          <Link
+            href="/architecture"
+            className="hidden rounded-full px-4 py-2 text-sm text-zinc-600 hover:text-zinc-900 sm:inline"
+          >
+            How it works
+          </Link>
+          <Link
+            href="/demo"
+            className="hidden rounded-full px-4 py-2 text-sm text-zinc-600 hover:text-zinc-900 sm:inline"
+          >
+            Live demo
+          </Link>
             <Link
               href="/login"
               className="rounded-full bg-zinc-900 px-5 py-2.5 text-sm font-semibold text-white"
@@ -124,7 +130,7 @@ export default function LandingPage() {
           <div className="flex flex-wrap items-end justify-between gap-4">
             <div>
               <h2 className="font-display text-3xl font-bold tracking-tight md:text-4xl">
-                CURATE recommends
+                Vector recommends
               </h2>
               <p className="mt-2 text-zinc-500">
                 Formats that actually move identity — film, mentors, music,
@@ -261,7 +267,7 @@ export default function LandingPage() {
       <footer className="border-t border-zinc-200 bg-[#faf9f7]">
         <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3 px-5 py-8 text-sm text-zinc-500 md:px-8">
           <div className="font-display text-lg font-bold text-zinc-900">
-            CURATE
+            Vector
           </div>
           <div className="flex gap-4">
             <Link href="/architecture">System</Link>

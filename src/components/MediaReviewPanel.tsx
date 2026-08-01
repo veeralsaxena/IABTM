@@ -13,6 +13,12 @@ type Props = {
   compact?: boolean;
 };
 
+function sentimentFromRating(n: number): "liked" | "disliked" | "mixed" {
+  if (n <= 2) return "disliked";
+  if (n >= 4) return "liked";
+  return "mixed";
+}
+
 export function MediaReviewPanel({
   mediaRef,
   mediaTitle,
@@ -55,7 +61,13 @@ export function MediaReviewPanel({
     })();
   }, [mediaRef]);
 
-  async function submit() {
+  async function submit(nextRating?: number, nextSentiment?: typeof sentiment) {
+    const r = nextRating ?? rating;
+    const s = nextSentiment ?? sentiment;
+    if (r < 1) {
+      setError("Tap a star rating first");
+      return;
+    }
     setBusy(true);
     setError(null);
     const res = await fetch("/api/reviews", {
@@ -67,8 +79,8 @@ export function MediaReviewPanel({
         mediaType,
         mediaUrl,
         pathId,
-        rating,
-        sentiment,
+        rating: r,
+        sentiment: s,
         review,
       }),
     });
@@ -78,8 +90,17 @@ export function MediaReviewPanel({
       setError(json.error || "Could not save");
       return;
     }
+    setRating(r);
+    setSentiment(s);
     setSaved(true);
     setOpen(false);
+  }
+
+  function onStar(n: number) {
+    const s = sentimentFromRating(n);
+    setRating(n);
+    setSentiment(s);
+    setOpen(true);
   }
 
   return (
@@ -96,8 +117,8 @@ export function MediaReviewPanel({
           </div>
           <p className="mt-0.5 text-sm text-zinc-600">
             {saved
-              ? `${rating}/5 · ${sentiment} — saved for the agent`
-              : "Rate why this helped (or didn’t)."}
+              ? `${rating}/5 · ${sentiment} — feeds next identity query`
+              : "Tap stars to rate — written note optional."}
           </p>
         </div>
         <button
@@ -105,35 +126,47 @@ export function MediaReviewPanel({
           onClick={() => setOpen((o) => !o)}
           className="rounded-full border border-zinc-300 bg-white px-3 py-1.5 text-xs font-medium text-zinc-700 hover:border-zinc-500"
         >
-          {open ? "Close" : saved ? "Edit review" : "Leave review"}
+          {open ? "Close" : saved ? "Edit rating" : "Rate"}
         </button>
+      </div>
+
+      {/* Always-visible stars for one-tap rating */}
+      <div className="mt-2 flex items-center gap-1">
+        {[1, 2, 3, 4, 5].map((n) => (
+          <button
+            key={n}
+            type="button"
+            disabled={busy}
+            onMouseEnter={() => setHover(n)}
+            onMouseLeave={() => setHover(0)}
+            onClick={() => onStar(n)}
+            className="p-0.5"
+            aria-label={`${n} stars`}
+          >
+            <Star
+              className={cn(
+                "h-5 w-5 transition",
+                (hover || rating) >= n
+                  ? "fill-amber-400 text-amber-400"
+                  : "text-zinc-300",
+              )}
+            />
+          </button>
+        ))}
+        {rating >= 1 && !saved && (
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => submit()}
+            className="ml-2 rounded-full bg-zinc-900 px-3 py-1 text-xs font-semibold text-white disabled:opacity-40"
+          >
+            {busy ? "Saving…" : "Submit"}
+          </button>
+        )}
       </div>
 
       {open && (
         <div className="mt-3 space-y-3 border-t border-zinc-200 pt-3">
-          <div className="flex items-center gap-1">
-            {[1, 2, 3, 4, 5].map((n) => (
-              <button
-                key={n}
-                type="button"
-                onMouseEnter={() => setHover(n)}
-                onMouseLeave={() => setHover(0)}
-                onClick={() => setRating(n)}
-                className="p-0.5"
-                aria-label={`${n} stars`}
-              >
-                <Star
-                  className={cn(
-                    "h-5 w-5",
-                    (hover || rating) >= n
-                      ? "fill-amber-400 text-amber-400"
-                      : "text-zinc-300",
-                  )}
-                />
-              </button>
-            ))}
-          </div>
-
           <div className="flex flex-wrap gap-2">
             {(
               [
@@ -161,8 +194,8 @@ export function MediaReviewPanel({
           <textarea
             value={review}
             onChange={(e) => setReview(e.target.value)}
-            rows={3}
-            placeholder="Why did this help — or why not? Be specific."
+            rows={2}
+            placeholder="Optional: why it helped — or didn’t"
             className="w-full resize-none rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm outline-none ring-zinc-900 focus:ring-2"
           />
 
@@ -170,11 +203,11 @@ export function MediaReviewPanel({
 
           <button
             type="button"
-            disabled={busy || rating < 1 || review.trim().length < 3}
-            onClick={submit}
+            disabled={busy || rating < 1}
+            onClick={() => submit()}
             className="rounded-full bg-zinc-900 px-4 py-2 text-sm font-semibold text-white disabled:opacity-40"
           >
-            {busy ? "Saving…" : "Save review"}
+            {busy ? "Saving…" : "Save rating"}
           </button>
         </div>
       )}
