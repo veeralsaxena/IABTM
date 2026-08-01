@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { discoverCategory } from "@/lib/curator/pipeline";
+import { discoverForType, toMediaItem } from "@/lib/curator/web-search";
+import { rerankCandidates } from "@/lib/curator/rerank";
 import type { MediaType, PathRecord } from "@/types";
 
 const TYPES: MediaType[] = [
@@ -48,21 +50,64 @@ export async function POST(request: Request) {
     .eq("id", user.id)
     .maybeSingle();
 
-  const items = await discoverCategory({
-    userId: user.id,
-    path: path as PathRecord,
-    mediaType,
-    learningStyles: profile?.learning_styles ?? [],
-  });
+  try {
+    const items = await discoverCategory({
+      userId: user.id,
+      path: path as PathRecord,
+      mediaType,
+      learningStyles: profile?.learning_styles ?? [],
+    });
 
-  return NextResponse.json({
-    mediaType,
-    path: {
-      id: path.id,
+    return NextResponse.json({
+      mediaType,
+      path: {
+        id: path.id,
+        method: path.method,
+        me_labels: path.me_labels,
+        iam_labels: path.iam_labels,
+      },
+      items,
+    });
+  } catch (e) {
+    // Last-resort: raw discovery without planner/embeddings
+    console.error("discoverCategory failed, falling back", e);
+    const found = await discoverForType({
+      mediaType,
+      queries: [
+        `${path.method} ${path.me_labels?.[0] ?? ""}`,
+        `${mediaType} focus growth`,
+      ],
+    });
+    const candidates = found.map((c) =>
+      toMediaItem(c, {
+        me: path.me_labels ?? [],
+        iam: path.iam_labels ?? [],
+        method: path.method,
+        stage: "early",
+        learningStyles: profile?.learning_styles ?? [],
+      }),
+    );
+    const items = rerankCandidates({
+      candidates,
+      me: path.me_labels ?? [],
+      iam: path.iam_labels ?? [],
       method: path.method,
-      me_labels: path.me_labels,
-      iam_labels: path.iam_labels,
-    },
-    items,
-  });
+      stage: "early",
+      learningStyles: profile?.learning_styles ?? [],
+      seenIds: new Set(),
+      identityQuery: `${path.me_labels?.join(" ")} ${path.iam_labels?.join(" ")} ${path.method}`,
+    });
+
+    return NextResponse.json({
+      mediaType,
+      path: {
+        id: path.id,
+        method: path.method,
+        me_labels: path.me_labels,
+        iam_labels: path.iam_labels,
+      },
+      items,
+      degraded: true,
+    });
+  }
 }

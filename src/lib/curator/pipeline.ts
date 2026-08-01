@@ -1,8 +1,10 @@
 import { createClient } from "@/lib/supabase/server";
 import { buildIdentityQuery } from "@/lib/curator/identity";
+import { cosineSimilarity } from "@/lib/curator/identity-block";
 import { planDiscoveryQueries } from "@/lib/curator/query-planner";
 import { diversifyTypes, rerankCandidates } from "@/lib/curator/rerank";
 import { discoverForType, toMediaItem } from "@/lib/curator/web-search";
+import { embedText } from "@/lib/ai/embeddings";
 import { groqJson, GROQ_MODEL } from "@/lib/ai/groq";
 import type {
   DailyBriefingResult,
@@ -237,6 +239,11 @@ export async function runCuratorPipeline(input: {
     );
   }
 
+  const vectorScores = await vectorScoreCandidates(
+    identity.embedding,
+    discovered,
+  );
+
   const ranked = rerankCandidates({
     candidates: discovered,
     me: input.path.me_labels,
@@ -246,6 +253,7 @@ export async function runCuratorPipeline(input: {
     learningStyles,
     seenIds,
     identityQuery: identity.query,
+    vectorScores,
   });
 
   const diverse = diversifyTypes(ranked, 8);
@@ -289,11 +297,35 @@ export async function runCuratorPipeline(input: {
         final: Number(d.scores.final.toFixed(3)),
       })),
       method: input.path.method,
-      model: `${GROQ_MODEL} + youtube/web discovery + self-reranker`,
+      model: `${GROQ_MODEL} + gemini-embedding + youtube/spotify discovery + hybrid reranker`,
       latencyMs: Date.now() - started,
-      discoverySource: "youtube+duckduckgo",
+      discoverySource: Object.keys(vectorScores).length
+        ? "youtube+spotify+vector"
+        : "youtube+spotify+lexical",
     },
   };
+}
+
+async function vectorScoreCandidates(
+  identityEmbedding: number[] | null,
+  candidates: MediaItem[],
+): Promise<Record<string, number>> {
+  if (!identityEmbedding?.length || !candidates.length) return {};
+  const scores: Record<string, number> = {};
+  // Embed a shortlist only — keep latency/quota bounded
+  const shortlist = candidates.slice(0, 12);
+  for (const item of shortlist) {
+    try {
+      const emb = await embedText(
+        `${item.title}. ${item.description}. ${item.creator ?? ""}`,
+      );
+      scores[item.id] = cosineSimilarity(identityEmbedding, emb);
+      await new Promise((r) => setTimeout(r, 80));
+    } catch {
+      // skip this item; lexical fallback still applies
+    }
+  }
+  return scores;
 }
 
 export async function discoverCategory(input: {
@@ -302,40 +334,67 @@ export async function discoverCategory(input: {
   mediaType: MediaType;
   learningStyles?: string[];
 }) {
-  const identity = await buildIdentityQuery({
-    path: input.path,
-    learningStyles: input.learningStyles,
-  });
-  const plan = await planDiscoveryQueries({
-    path: input.path,
-    stage: identity.stage,
-    learningStyles: input.learningStyles,
-  });
-  const queries = plan.queriesByType[input.mediaType] ?? [
-    `${input.path.method} ${input.path.me_labels[0]}`,
+  let stage: "early" | "middle" | "late" | "any" = "early";
+  let identityQuery = `${input.path.me_labels.join(" ")} ${input.path.iam_labels.join(" ")} ${input.path.method}`;
+  let identityEmbedding: number[] | null = null;
+  let queries = [
+    `${input.path.method} ${input.path.me_labels[0] ?? ""} ${input.path.iam_labels[0] ?? ""}`,
+    `${input.mediaType} ${input.path.method} personal growth`,
   ];
+
+  try {
+    const identity = await buildIdentityQuery({
+      path: input.path,
+      learningStyles: input.learningStyles,
+    });
+    stage = identity.stage;
+    identityQuery = identity.query;
+    identityEmbedding = identity.embedding;
+  } catch {
+    // Gemini down — continue with lexical path context
+  }
+
+  try {
+    const plan = await planDiscoveryQueries({
+      path: input.path,
+      stage,
+      learningStyles: input.learningStyles,
+    });
+    queries = plan.queriesByType[input.mediaType] ?? queries;
+  } catch {
+    // Groq down — keep heuristic queries
+  }
+
   const found = await discoverForType({
     mediaType: input.mediaType,
     queries,
   });
+
   const candidates = found.map((c) =>
     toMediaItem(c, {
       me: input.path.me_labels,
       iam: input.path.iam_labels,
       method: input.path.method,
-      stage: identity.stage,
+      stage,
       learningStyles: input.learningStyles ?? [],
     }),
   );
+
   const seenIds = await fetchSeenIds(input.userId, input.path.id);
+  const vectorScores = await vectorScoreCandidates(
+    identityEmbedding,
+    candidates,
+  );
+
   return rerankCandidates({
     candidates,
     me: input.path.me_labels,
     iam: input.path.iam_labels,
     method: input.path.method,
-    stage: identity.stage,
+    stage,
     learningStyles: input.learningStyles ?? [],
     seenIds,
-    identityQuery: identity.query,
+    identityQuery,
+    vectorScores,
   });
 }

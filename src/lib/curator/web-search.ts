@@ -42,114 +42,124 @@ export async function searchYouTube(
   query: string,
   limit = 8,
 ): Promise<DiscoveredCandidate[]> {
-  const res = await fetch(
-    "https://www.youtube.com/youtubei/v1/search?prettyPrint=false",
-    {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "User-Agent":
-          "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36",
-      },
-      body: JSON.stringify({
-        context: {
-          client: {
-            clientName: "WEB",
-            clientVersion: "2.20240101.00.00",
-            hl: "en",
-            gl: "US",
-          },
+  try {
+    const res = await fetch(
+      "https://www.youtube.com/youtubei/v1/search?prettyPrint=false",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "User-Agent":
+            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36",
         },
-        query,
-      }),
-      next: { revalidate: 0 },
-    },
-  );
+        body: JSON.stringify({
+          context: {
+            client: {
+              clientName: "WEB",
+              clientVersion: "2.20240101.00.00",
+              hl: "en",
+              gl: "US",
+            },
+          },
+          query,
+        }),
+        signal: AbortSignal.timeout(8000),
+        next: { revalidate: 0 },
+      },
+    );
 
-  if (!res.ok) return [];
-  const data = await res.json();
-  const sections =
-    data?.contents?.twoColumnSearchResultsRenderer?.primaryContents
-      ?.sectionListRenderer?.contents ?? [];
+    if (!res.ok) return [];
+    const data = await res.json();
+    const sections =
+      data?.contents?.twoColumnSearchResultsRenderer?.primaryContents
+        ?.sectionListRenderer?.contents ?? [];
 
-  const out: DiscoveredCandidate[] = [];
-  for (const section of sections) {
-    for (const item of section?.itemSectionRenderer?.contents ?? []) {
-      const r = item.videoRenderer;
-      if (!r?.videoId) continue;
-      const title =
-        r.title?.runs?.map((x: { text: string }) => x.text).join("") ||
-        r.title?.simpleText ||
-        "Untitled";
-      const description =
-        r.detailedMetadataSnippets?.[0]?.snippetText?.runs
-          ?.map((x: { text: string }) => x.text)
-          .join("") || title;
-      out.push({
-        title,
-        description,
-        url: `https://www.youtube.com/watch?v=${r.videoId}`,
-        creator: r.ownerText?.runs?.[0]?.text || "YouTube",
-        media_type: "film",
-        duration_minutes: parseDuration(r.lengthText?.simpleText),
-        source: "youtube",
-      });
-      if (out.length >= limit) return out;
+    const out: DiscoveredCandidate[] = [];
+    for (const section of sections) {
+      for (const item of section?.itemSectionRenderer?.contents ?? []) {
+        const r = item.videoRenderer;
+        if (!r?.videoId) continue;
+        const title =
+          r.title?.runs?.map((x: { text: string }) => x.text).join("") ||
+          r.title?.simpleText ||
+          "Untitled";
+        const description =
+          r.detailedMetadataSnippets?.[0]?.snippetText?.runs
+            ?.map((x: { text: string }) => x.text)
+            .join("") || title;
+        out.push({
+          title,
+          description,
+          url: `https://www.youtube.com/watch?v=${r.videoId}`,
+          creator: r.ownerText?.runs?.[0]?.text || "YouTube",
+          media_type: "film",
+          duration_minutes: parseDuration(r.lengthText?.simpleText),
+          source: "youtube",
+        });
+        if (out.length >= limit) return out;
+      }
     }
+    return out;
+  } catch {
+    return [];
   }
-  return out;
 }
 
-/** DuckDuckGo HTML search for articles, mentors, art references. */
+/** DuckDuckGo HTML search — soft-fails on timeout/blocks. */
 export async function searchWeb(
   query: string,
   limit = 6,
 ): Promise<DiscoveredCandidate[]> {
-  const res = await fetch(
-    `https://html.duckduckgo.com/html/?q=${encodeURIComponent(query)}`,
-    {
-      headers: {
-        "User-Agent":
-          "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36",
+  try {
+    const res = await fetch(
+      `https://html.duckduckgo.com/html/?q=${encodeURIComponent(query)}`,
+      {
+        headers: {
+          "User-Agent":
+            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36",
+        },
+        signal: AbortSignal.timeout(6000),
+        next: { revalidate: 0 },
       },
-      next: { revalidate: 0 },
-    },
-  );
-  if (!res.ok) return [];
-  const html = await res.text();
-  const titles = [...html.matchAll(/class="result__a"[^>]*>([^<]+)/g)].map(
-    (m) => decodeHtml(m[1]),
-  );
-  const links = [...html.matchAll(/uddg=([^&"]+)/g)].map((m) =>
-    decodeURIComponent(m[1]),
-  );
-  const snippets = [
-    ...html.matchAll(/class="result__snippet"[^>]*>([\s\S]*?)<\/a>/g),
-  ].map((m) => decodeHtml(m[1].replace(/<[^>]+>/g, "")).trim());
+    );
+    if (!res.ok) return [];
+    const html = await res.text();
+    const titles = [...html.matchAll(/class="result__a"[^>]*>([^<]+)/g)].map(
+      (m) => decodeHtml(m[1]),
+    );
+    const links = [...html.matchAll(/uddg=([^&"]+)/g)].map((m) =>
+      decodeURIComponent(m[1]),
+    );
+    const snippets = [
+      ...html.matchAll(/class="result__snippet"[^>]*>([\s\S]*?)<\/a>/g),
+    ].map((m) => decodeHtml(m[1].replace(/<[^>]+>/g, "")).trim());
 
-  const seen = new Set<string>();
-  const out: DiscoveredCandidate[] = [];
-  for (let i = 0; i < links.length && out.length < limit; i++) {
-    const url = links[i];
-    if (!url || seen.has(url) || url.includes("duckduckgo.com")) continue;
-    seen.add(url);
-    out.push({
-      title: titles[i] || url,
-      description: snippets[i] || titles[i] || "Web result",
-      url,
-      creator: (() => {
-        try {
-          return new URL(url).hostname.replace(/^www\./, "");
-        } catch {
-          return "web";
-        }
-      })(),
-      media_type: "editorial",
-      duration_minutes: 8,
-      source: "web",
-    });
+    const seen = new Set<string>();
+    const out: DiscoveredCandidate[] = [];
+    for (let i = 0; i < links.length && out.length < limit; i++) {
+      const url = links[i];
+      if (!url || seen.has(url) || url.includes("duckduckgo.com")) continue;
+      seen.add(url);
+      out.push({
+        title: titles[i] || url,
+        description: snippets[i] || titles[i] || "Web result",
+        url,
+        creator: (() => {
+          try {
+            return new URL(url).hostname.replace(/^www\./, "");
+          } catch {
+            return "web";
+          }
+        })(),
+        media_type: "editorial",
+        duration_minutes: 8,
+        source: "web",
+      });
+    }
+    return out;
+  } catch {
+    return [];
   }
-  return out;
 }
 
 const YOUTUBE_TYPES: MediaType[] = [
@@ -199,19 +209,74 @@ function webQueryForType(mediaType: MediaType, q: string) {
 
 /** Prefer Spotify playlist/track links for free embeddable music. */
 async function searchSpotifyMusic(query: string, limit = 5) {
-  const web = await searchWeb(
-    `site:open.spotify.com ${query} playlist OR track`,
-    limit + 4,
-  );
-  return web
-    .filter((c) => /open\.spotify\.com\/(playlist|track|album)\//i.test(c.url))
-    .slice(0, limit)
-    .map((c) => ({
-      ...c,
-      media_type: "music" as MediaType,
-      source: "web" as const,
-    }));
+  try {
+    const web = await searchWeb(
+      `site:open.spotify.com ${query} playlist OR track`,
+      limit + 4,
+    );
+    return web
+      .filter((c) =>
+        /open\.spotify\.com\/(playlist|track|album)\//i.test(c.url),
+      )
+      .slice(0, limit)
+      .map((c) => ({
+        ...c,
+        media_type: "music" as MediaType,
+        source: "web" as const,
+      }));
+  } catch {
+    return [];
+  }
 }
+
+/** Curated public Spotify playlists — always embeddable when DDG is blocked. */
+const SPOTIFY_SEED: DiscoveredCandidate[] = [
+  {
+    title: "Deep Focus",
+    description: "Calm instrumental focus for protected work blocks.",
+    url: "https://open.spotify.com/playlist/37i9dQZF1DWZeKCadgRdKQ",
+    creator: "Spotify",
+    media_type: "music",
+    duration_minutes: 45,
+    source: "web",
+  },
+  {
+    title: "Lo-Fi Beats",
+    description: "Chill beats to study / work / timebox to.",
+    url: "https://open.spotify.com/playlist/37i9dQZF1DWWQRwui0ExPn",
+    creator: "Spotify",
+    media_type: "music",
+    duration_minutes: 60,
+    source: "web",
+  },
+  {
+    title: "Peaceful Piano",
+    description: "Soft piano for intentional, low-stimulation practice.",
+    url: "https://open.spotify.com/playlist/37i9dQZF1DX4sWSpwq3LiO",
+    creator: "Spotify",
+    media_type: "music",
+    duration_minutes: 50,
+    source: "web",
+  },
+  {
+    title: "Instrumental Study",
+    description: "Background instrumentals that support deep work.",
+    url: "https://open.spotify.com/playlist/37i9dQZF1DX8NTLI2TtZa6",
+    creator: "Spotify",
+    media_type: "music",
+    duration_minutes: 55,
+    source: "web",
+  },
+  {
+    title: "Brain Food",
+    description: "Electronic focus music without lyrical distraction.",
+    url: "https://open.spotify.com/playlist/37i9dQZF1DWXLeA8Omikj7",
+    creator: "Spotify",
+    media_type: "music",
+    duration_minutes: 50,
+    source: "web",
+  },
+];
 
 export async function discoverForType(input: {
   mediaType: MediaType;
@@ -228,13 +293,17 @@ export async function discoverForType(input: {
     if (input.mediaType === "music") {
       const spotify = await searchSpotifyMusic(q, 5);
       results.push(...spotify);
-      const yt = await searchYouTube(youtubeQueryForType("music", q), 6);
-      results.push(
-        ...yt.map((c) => ({
-          ...c,
-          media_type: "music" as MediaType,
-        })),
-      );
+      try {
+        const yt = await searchYouTube(youtubeQueryForType("music", q), 6);
+        results.push(
+          ...yt.map((c) => ({
+            ...c,
+            media_type: "music" as MediaType,
+          })),
+        );
+      } catch {
+        // YouTube may flake; Spotify seeds still cover the tab
+      }
       continue;
     }
 
@@ -246,13 +315,20 @@ export async function discoverForType(input: {
       input.mediaType === "editorial";
 
     if (wantYoutube) {
-      const yt = await searchYouTube(youtubeQueryForType(input.mediaType, q), 8);
-      results.push(
-        ...yt.map((c) => ({
-          ...c,
-          media_type: input.mediaType,
-        })),
-      );
+      try {
+        const yt = await searchYouTube(
+          youtubeQueryForType(input.mediaType, q),
+          8,
+        );
+        results.push(
+          ...yt.map((c) => ({
+            ...c,
+            media_type: input.mediaType,
+          })),
+        );
+      } catch {
+        // continue
+      }
     }
 
     if (
@@ -269,19 +345,28 @@ export async function discoverForType(input: {
     }
   }
 
+  if (input.mediaType === "music") {
+    // Always surface embeddable Spotify even if search APIs flake
+    results.push(...SPOTIFY_SEED);
+  }
+
   if (results.length < 3) {
-    const broad = await searchYouTube(
-      input.mediaType === "music"
-        ? "lofi focus instrumental study music"
-        : `${input.mediaType} personal development practical`,
-      8,
-    );
-    results.push(
-      ...broad.map((c) => ({
-        ...c,
-        media_type: input.mediaType,
-      })),
-    );
+    try {
+      const broad = await searchYouTube(
+        input.mediaType === "music"
+          ? "lofi focus instrumental study music"
+          : `${input.mediaType} personal development practical`,
+        8,
+      );
+      results.push(
+        ...broad.map((c) => ({
+          ...c,
+          media_type: input.mediaType,
+        })),
+      );
+    } catch {
+      // empty handled by caller
+    }
   }
 
   const dedup = new Map<string, DiscoveredCandidate>();

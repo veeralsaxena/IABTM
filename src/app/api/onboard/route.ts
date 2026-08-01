@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { pickMethod } from "@/lib/data/catalog";
 import { embedText } from "@/lib/ai/embeddings";
+import { buildIdentityBlock } from "@/lib/curator/identity-block";
 import { runCuratorPipeline } from "@/lib/curator/pipeline";
 import { groqText } from "@/lib/ai/groq";
 import type { PathRecord } from "@/types";
@@ -40,8 +41,25 @@ export async function POST(request: Request) {
     `Me: ${me.join(", ")}. I Am: ${iam.join(", ")}. Method: ${method.id}. Blurb: ${method.blurb}. Vibe: ${vibe ?? "n/a"}. Motivation: ${motivation ?? "n/a"}.`,
   );
 
-  const identityText = `Becoming from ${me.join(", ")} to ${iam.join(", ")} through ${method.id}. ${method.blurb}. Vibe ${vibe ?? ""}. Prefers ${motivation ?? ""}.`;
-  const embedding = await embedText(identityText);
+  // Identity block → Gemini embedding → stored on path (pgvector-ready)
+  const identityBlock = await buildIdentityBlock({
+    path: {
+      me_labels: me,
+      iam_labels: iam,
+      method: method.id,
+      method_rationale: rationale,
+    },
+    vibe,
+    motivation,
+    answers,
+  });
+
+  let embedding: number[] | null = null;
+  try {
+    embedding = await embedText(identityBlock.rawText);
+  } catch (e) {
+    console.error("identity embed failed", e);
+  }
 
   await supabase
     .from("profiles")
@@ -63,21 +81,26 @@ export async function POST(request: Request) {
     .eq("user_id", user.id)
     .eq("status", "active");
 
+  const insertPayload: Record<string, unknown> = {
+    user_id: user.id,
+    me_labels: me,
+    iam_labels: iam,
+    method: method.id,
+    method_rationale: rationale,
+    day_number: 1,
+    total_days: 111,
+    progress: 0,
+    answers: {
+      ...answers,
+      identity_block: identityBlock,
+    },
+    status: "active",
+  };
+  if (embedding) insertPayload.identity_embedding = embedding;
+
   const { data: path, error } = await supabase
     .from("paths")
-    .insert({
-      user_id: user.id,
-      me_labels: me,
-      iam_labels: iam,
-      method: method.id,
-      method_rationale: rationale,
-      day_number: 1,
-      total_days: 111,
-      progress: 0,
-      identity_embedding: embedding,
-      answers,
-      status: "active",
-    })
+    .insert(insertPayload)
     .select("*")
     .single();
 
@@ -113,6 +136,7 @@ export async function POST(request: Request) {
           whyNow: briefing.whyNow,
           discovery: briefing.discovery,
           trace: briefing.trace,
+          identityBlock,
         },
       },
       { onConflict: "user_id,path_id,briefing_date" },
@@ -121,5 +145,5 @@ export async function POST(request: Request) {
     console.error("curation during onboard failed", e);
   }
 
-  return NextResponse.json({ path, briefing, method });
+  return NextResponse.json({ path, briefing, method, identityBlock });
 }

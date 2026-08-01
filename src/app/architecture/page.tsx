@@ -20,8 +20,8 @@ export default function ArchitecturePage() {
           System design
         </h1>
         <p className="mt-4 text-lg leading-relaxed text-zinc-500">
-          Production-shaped loop: identity in → live discovery → potential
-          rerank → explain → behave → adapt. The LLM never picks the winner.
+          Hybrid retrieval: identity block → Gemini embedding (pgvector-ready)
+          → live web discovery → vector + lexical rerank → explain → adapt.
         </p>
 
         <ol className="mt-10 space-y-4">
@@ -31,8 +31,8 @@ export default function ArchitecturePage() {
               "Me / I Am attributes, questions, learning styles, check-ins, completed activities, resonance / rejection.",
             ],
             [
-              "Path + identity query",
-              "Method for the Me→I Am gap. Gemini embeds a stage-aware identity query (768-d), enriched with what you practiced and rejected.",
+              "Identity block",
+              "Three answers — who I am now, who I’m becoming, how I get there — concatenated and embedded with Gemini (768-d). Stored on the path as identity_embedding for pgvector.",
             ],
             [
               "Query planner (Groq)",
@@ -40,19 +40,19 @@ export default function ArchitecturePage() {
             ],
             [
               "Web discovery",
-              "Live YouTube + DuckDuckGo. Discover tabs are session-cached so switching types does not re-hit the network.",
+              "Live YouTube + Spotify embeds (+ DuckDuckGo when reachable). Tabs are session-cached.",
             ],
             [
-              "Potential reranker",
-              "Self-built scorer: identity fit, method keywords, duration, novelty, anti-clickbait. Deterministic shortlist.",
+              "Hybrid rerank",
+              "Cosine(identity, media embedding) when available, plus lexical method/attribute fit, duration, novelty, anti-clickbait. LLM does not pick the winner.",
             ],
             [
               "Explain + act",
-              "Groq writes why-now. Sidebar activities can be marked done — that signal feeds the next identity query.",
+              "Groq writes why-now. Marking activities done feeds the next identity query.",
             ],
             [
               "Adapt",
-              "Changing attributes in Settings invalidates today’s briefing and rebuilds method + media. Completing activities biases tomorrow toward practice-aligned content.",
+              "Attribute changes rebuild method + invalidate today’s briefing. Behavior signals reshape tomorrow’s search.",
             ],
           ].map(([t, d], i) => (
             <li
@@ -67,6 +67,21 @@ export default function ArchitecturePage() {
             </li>
           ))}
         </ol>
+
+        <div className="mt-8 rounded-2xl bg-zinc-900 p-5 text-sm leading-relaxed text-zinc-300">
+          <div className="font-semibold text-white">
+            Why not lexical-only? Why not pgvector-only?
+          </div>
+          <p className="mt-2">
+            Lexical overlap alone misses synonyms (“procrastinating” vs “putting
+            things off”). Pure pgvector alone needs a pre-indexed catalog —
+            live web candidates aren’t in Postgres until we embed them. Best
+            production pattern: store the identity vector in Supabase pgvector,
+            discover from the web, embed the shortlist, score with cosine +
+            rules. That is what this stack does.
+          </p>
+        </div>
+
         <div className="mt-8 rounded-2xl border border-zinc-200 bg-white p-5">
           <div className="font-semibold">UI shell decisions</div>
           <ul className="mt-3 space-y-2 text-sm leading-relaxed text-zinc-500">

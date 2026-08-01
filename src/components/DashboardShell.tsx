@@ -4,6 +4,13 @@ import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type PointerEvent as ReactPointerEvent,
+} from "react";
+import {
   ChevronLeft,
   ChevronRight,
   Compass,
@@ -34,12 +41,123 @@ const nav = [
   { href: "/architecture", label: "How it works", icon: Compass },
 ];
 
+const LEFT_DEFAULT = 240;
+const LEFT_MIN = 180;
+const LEFT_MAX = 420;
+const LEFT_COLLAPSED = 64;
+
+const RIGHT_DEFAULT = 280;
+const RIGHT_MIN = 220;
+const RIGHT_MAX = 480;
+
+function clamp(n: number, min: number, max: number) {
+  return Math.max(min, Math.min(max, n));
+}
+
+function useResizableWidth(
+  key: string,
+  defaults: { initial: number; min: number; max: number },
+) {
+  const [width, setWidth] = useState(defaults.initial);
+  const [isDragging, setIsDragging] = useState(false);
+  const dragging = useRef(false);
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(key);
+      if (raw != null) {
+        const n = Number(raw);
+        if (!Number.isNaN(n)) {
+          setWidth(clamp(n, defaults.min, defaults.max));
+        }
+      }
+    } catch {
+      // ignore
+    }
+  }, [key, defaults.min, defaults.max]);
+
+  const persist = useCallback(
+    (next: number) => {
+      const w = clamp(next, defaults.min, defaults.max);
+      setWidth(w);
+      try {
+        localStorage.setItem(key, String(w));
+      } catch {
+        // ignore
+      }
+    },
+    [key, defaults.min, defaults.max],
+  );
+
+  const onPointerDown = useCallback(
+    (e: ReactPointerEvent<HTMLDivElement>, direction: "left" | "right") => {
+      e.preventDefault();
+      dragging.current = true;
+      setIsDragging(true);
+      const startX = e.clientX;
+      const startWidth = width;
+      const target = e.currentTarget;
+      target.setPointerCapture(e.pointerId);
+      document.body.style.cursor = "col-resize";
+      document.body.style.userSelect = "none";
+
+      function onMove(ev: PointerEvent) {
+        if (!dragging.current) return;
+        const delta = ev.clientX - startX;
+        // Left panel grows when dragging right; right panel grows when dragging left.
+        const next =
+          direction === "left" ? startWidth + delta : startWidth - delta;
+        persist(next);
+      }
+
+      function onUp(ev: PointerEvent) {
+        dragging.current = false;
+        setIsDragging(false);
+        target.releasePointerCapture(ev.pointerId);
+        document.body.style.cursor = "";
+        document.body.style.userSelect = "";
+        window.removeEventListener("pointermove", onMove);
+        window.removeEventListener("pointerup", onUp);
+      }
+
+      window.addEventListener("pointermove", onMove);
+      window.addEventListener("pointerup", onUp);
+    },
+    [width, persist],
+  );
+
+  return { width, isDragging, onPointerDown };
+}
+
+function ResizeHandle({
+  onPointerDown,
+  side,
+}: {
+  onPointerDown: (e: ReactPointerEvent<HTMLDivElement>) => void;
+  side: "left" | "right";
+}) {
+  return (
+    <div
+      role="separator"
+      aria-orientation="vertical"
+      aria-label={side === "left" ? "Resize left sidebar" : "Resize right sidebar"}
+      onPointerDown={onPointerDown}
+      className={cn(
+        "group absolute top-0 z-20 flex h-full w-1.5 cursor-col-resize items-stretch justify-center",
+        side === "left" ? "right-0" : "left-0",
+      )}
+    >
+      <span className="w-px bg-transparent transition-colors group-hover:bg-zinc-300 group-active:bg-zinc-400" />
+    </div>
+  );
+}
+
 /**
  * Shell sizing (judge-ready rationale):
- * - Left nav 240px → 64px rail (industry default for SaaS dashboards)
- * - Right context 280px → collapsible so primary media gets the measure
+ * - Left nav defaults 240px, collapses to 64px rail, drag edge to resize
+ * - Right context defaults 280px, collapsible, drag edge to resize
  * - Sticky top bar hosts notifications (F-pattern: status lives top-right)
- * - Main column is fluid flex-1 with capped readable padding — not fixed middle squeeze
+ * - Main column is fluid flex-1 with capped readable padding
  */
 export function DashboardShell({
   children,
@@ -60,6 +178,16 @@ export function DashboardShell({
   const router = useRouter();
   const left = useShellCollapse("curate_left_collapsed", false);
   const right = useShellCollapse("curate_right_collapsed", false);
+  const leftSize = useResizableWidth("curate_left_width", {
+    initial: LEFT_DEFAULT,
+    min: LEFT_MIN,
+    max: LEFT_MAX,
+  });
+  const rightSize = useResizableWidth("curate_right_width", {
+    initial: RIGHT_DEFAULT,
+    min: RIGHT_MIN,
+    max: RIGHT_MAX,
+  });
 
   async function signOut() {
     const supabase = createClient();
@@ -77,14 +205,17 @@ export function DashboardShell({
     )?.label ||
     "CURATE";
 
+  const leftWidth = left.collapsed ? LEFT_COLLAPSED : leftSize.width;
+
   return (
     <div className="min-h-screen bg-[#f3f4f6] text-zinc-900">
       <div className="flex min-h-screen w-full">
-        {/* Left nav — 240 / 64 */}
+        {/* Left nav — resizable / collapsible */}
         <aside
+          style={{ width: leftWidth }}
           className={cn(
-            "sticky top-0 hidden h-screen shrink-0 flex-col border-r border-zinc-200 bg-white transition-[width] duration-200 ease-in-out md:flex",
-            left.collapsed ? "w-16" : "w-60",
+            "relative sticky top-0 hidden h-screen shrink-0 flex-col border-r border-zinc-200 bg-white md:flex",
+            !leftSize.isDragging && "transition-[width] duration-200 ease-in-out",
           )}
         >
           <div
@@ -107,7 +238,7 @@ export function DashboardShell({
               type="button"
               onClick={left.toggle}
               aria-label={left.collapsed ? "Expand sidebar" : "Collapse sidebar"}
-              className="flex h-8 w-8 items-center justify-center rounded-lg text-zinc-500 hover:bg-zinc-100"
+              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-zinc-500 hover:bg-zinc-100"
             >
               {left.collapsed ? (
                 <ChevronRight className="h-4 w-4" />
@@ -119,7 +250,7 @@ export function DashboardShell({
 
           {!left.collapsed && (
             <div className="mx-3 mt-3 flex items-center gap-3 rounded-xl bg-zinc-50 px-2.5 py-2.5">
-              <div className="relative h-9 w-9 overflow-hidden rounded-full bg-zinc-200">
+              <div className="relative h-9 w-9 shrink-0 overflow-hidden rounded-full bg-zinc-200">
                 {avatarUrl ? (
                   <Image src={avatarUrl} alt="" fill className="object-cover" />
                 ) : (
@@ -158,7 +289,7 @@ export function DashboardShell({
                 >
                   <Icon className="h-4 w-4 shrink-0" />
                   {!left.collapsed && (
-                    <span className="leading-none">{item.label}</span>
+                    <span className="truncate leading-none">{item.label}</span>
                   )}
                 </Link>
               );
@@ -186,6 +317,13 @@ export function DashboardShell({
               {!left.collapsed && <span>Sign out</span>}
             </button>
           </div>
+
+          {!left.collapsed && (
+            <ResizeHandle
+              side="left"
+              onPointerDown={(e) => leftSize.onPointerDown(e, "left")}
+            />
+          )}
         </aside>
 
         <div className="flex min-w-0 flex-1 flex-col">
@@ -255,9 +393,20 @@ export function DashboardShell({
               <div className="mx-auto w-full max-w-5xl">{children}</div>
             </main>
 
-            {/* Right context — 280px, collapsible */}
+            {/* Right context — resizable / collapsible */}
             {rightPanel && !right.collapsed && (
-              <aside className="hidden w-[280px] shrink-0 overflow-y-auto border-l border-zinc-200 bg-[#f8f8f8] px-3 py-4 xl:block">
+              <aside
+                style={{ width: rightSize.width }}
+                className={cn(
+                  "relative hidden shrink-0 overflow-y-auto border-l border-zinc-200 bg-[#f8f8f8] px-3 py-4 xl:block",
+                  !rightSize.isDragging &&
+                    "transition-[width] duration-200 ease-in-out",
+                )}
+              >
+                <ResizeHandle
+                  side="right"
+                  onPointerDown={(e) => rightSize.onPointerDown(e, "right")}
+                />
                 {rightPanel}
               </aside>
             )}

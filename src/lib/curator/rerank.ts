@@ -1,4 +1,5 @@
 import type { MediaItem, ScoredMedia } from "@/types";
+import { cosineToUnit } from "@/lib/curator/identity-block";
 
 function clamp01(n: number) {
   return Math.max(0, Math.min(1, n));
@@ -27,10 +28,13 @@ const CLICKBAIT =
   /\b(shocking|you won't believe|gone wrong|insane|hack your brain|make you rich|overnight|secret trick)\b/i;
 
 /**
- * Self-built reranker (cross-feature scorer).
- * Industry "rerankers" re-score a shortlist after retrieval.
- * We don't need a hosted BGE model — we combine identity lexical fit,
- * duration fitness, anti-clickbait, and method keywords into one score.
+ * Hybrid reranker:
+ * - Prefer vector cosine (identity ↔ media embedding) when available
+ * - Keep lexical + duration + anti-clickbait as complementary signals
+ *
+ * Production path stores identity embeddings in Supabase pgvector and
+ * compares against cached media embeddings. Live web candidates are
+ * embedded on the shortlist when the embedding API is available.
  */
 export function rerankCandidates(input: {
   candidates: MediaItem[];
@@ -41,24 +45,40 @@ export function rerankCandidates(input: {
   learningStyles: string[];
   seenIds: Set<string>;
   identityQuery: string;
+  /** cosine similarity per candidate id, if embeddings were computed */
+  vectorScores?: Record<string, number>;
 }): ScoredMedia[] {
   const methodTokens = tokens(input.method);
   const queryTokens = new Set(tokens(input.identityQuery));
+  const hasVectors =
+    input.vectorScores && Object.keys(input.vectorScores).length > 0;
 
   return input.candidates
     .map((item) => {
       const blob = `${item.title} ${item.description} ${item.creator ?? ""}`;
-      const identityFit = clamp01(
+      const lexicalIdentity = clamp01(
         0.4 * overlapScore(blob, input.me) +
           0.45 * overlapScore(blob, input.iam) +
           0.15 * overlapScore(blob, [input.method]),
       );
 
+      const vectorRaw = input.vectorScores?.[item.id];
+      const vectorFit =
+        typeof vectorRaw === "number" ? cosineToUnit(vectorRaw) : null;
+
+      // Prefer semantic vector when present; otherwise lexical overlap.
+      const identityFit =
+        vectorFit != null
+          ? clamp01(0.75 * vectorFit + 0.25 * lexicalIdentity)
+          : lexicalIdentity;
+
       const blobTokens = tokens(blob);
       const queryHit =
         blobTokens.filter((t) => queryTokens.has(t)).length /
         Math.max(8, queryTokens.size);
-      const semanticProxy = clamp01(queryHit);
+      const semanticProxy = clamp01(
+        vectorFit != null ? 0.7 * vectorFit + 0.3 * queryHit : queryHit,
+      );
 
       const mins = item.duration_minutes ?? 8;
       const durationFit =
@@ -81,7 +101,10 @@ export function rerankCandidates(input: {
       const styleFit = input.learningStyles.length
         ? Math.max(
             0.35,
-            overlapScore(blob, input.learningStyles.map((s) => s.toLowerCase())),
+            overlapScore(
+              blob,
+              input.learningStyles.map((s) => s.toLowerCase()),
+            ),
           )
         : 0.6;
 
@@ -91,17 +114,25 @@ export function rerankCandidates(input: {
         0.55 * identityFit + 0.25 * semanticProxy + 0.2 * durationFit,
       );
 
-      const final =
-        0.3 * identityFit +
-        0.18 * semanticProxy +
-        0.14 * methodFit +
-        0.12 * durationFit +
-        0.08 * styleFit +
-        0.1 * novelty +
-        0.08 * antiAttention;
+      const final = hasVectors
+        ? 0.34 * identityFit +
+          0.2 * semanticProxy +
+          0.12 * methodFit +
+          0.1 * durationFit +
+          0.08 * styleFit +
+          0.08 * novelty +
+          0.08 * antiAttention
+        : 0.3 * identityFit +
+          0.18 * semanticProxy +
+          0.14 * methodFit +
+          0.12 * durationFit +
+          0.08 * styleFit +
+          0.1 * novelty +
+          0.08 * antiAttention;
 
       return {
         ...item,
+        similarity: vectorRaw ?? item.similarity,
         potential_score: potential,
         attention_trap_score: 1 - antiAttention,
         scores: {
@@ -117,7 +148,6 @@ export function rerankCandidates(input: {
     .sort((a, b) => b.scores.final - a.scores.final);
 }
 
-/** Keep format diversity across the shortlist. */
 export function diversifyTypes(
   ranked: ScoredMedia[],
   limit = 6,
