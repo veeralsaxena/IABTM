@@ -37,25 +37,37 @@ async function fetchSeenIds(userId: string, pathId: string) {
   );
 }
 
-/** Agentic memory: activities + resonance reshape the next identity query. */
+/**
+ * Agentic memory / human-in-the-loop:
+ * reviews + interactions + activities reshape the next identity query & rerank.
+ */
 async function fetchBehaviorSignals(userId: string, pathId: string) {
   const supabase = await createClient();
-  const [{ data: checkIns }, { data: interactions }] = await Promise.all([
-    supabase
-      .from("check_ins")
-      .select("body")
-      .eq("user_id", userId)
-      .order("created_at", { ascending: false })
-      .limit(20),
-    supabase
-      .from("interactions")
-      .select("action")
-      .eq("user_id", userId)
-      .eq("path_id", pathId)
-      .in("action", ["resonated", "not_for_me"])
-      .order("created_at", { ascending: false })
-      .limit(20),
-  ]);
+  const [{ data: checkIns }, { data: interactions }, { data: reviews }] =
+    await Promise.all([
+      supabase
+        .from("check_ins")
+        .select("body, created_at")
+        .eq("user_id", userId)
+        .order("created_at", { ascending: false })
+        .limit(20),
+      supabase
+        .from("interactions")
+        .select("action, created_at")
+        .eq("user_id", userId)
+        .eq("path_id", pathId)
+        .in("action", ["resonated", "not_for_me", "viewed", "completed"])
+        .order("created_at", { ascending: false })
+        .limit(40),
+      supabase
+        .from("media_reviews")
+        .select(
+          "media_ref, media_title, media_type, rating, sentiment, review, updated_at",
+        )
+        .eq("user_id", userId)
+        .order("updated_at", { ascending: false })
+        .limit(30),
+    ]);
 
   const completedActivities = (checkIns ?? [])
     .map((c) => c.body as string)
@@ -64,21 +76,62 @@ async function fetchBehaviorSignals(userId: string, pathId: string) {
     .filter(Boolean)
     .slice(0, 8);
 
+  const liked = (reviews ?? []).filter(
+    (r) => r.sentiment === "liked" || (r.rating ?? 0) >= 4,
+  );
+  const disliked = (reviews ?? []).filter(
+    (r) => r.sentiment === "disliked" || (r.rating ?? 0) <= 2,
+  );
+
+  const likedTitles = liked
+    .map((r) => (r.media_title as string) || (r.media_ref as string))
+    .filter(Boolean)
+    .slice(0, 8);
+  const dislikedTitles = disliked
+    .map((r) => (r.media_title as string) || (r.media_ref as string))
+    .filter(Boolean)
+    .slice(0, 8);
+  const dislikedReasons = disliked
+    .map((r) => (r.review as string)?.trim())
+    .filter(Boolean)
+    .slice(0, 5) as string[];
+  const avoidIds = new Set(
+    disliked.map((r) => r.media_ref as string).filter(Boolean),
+  );
+
   const resonatedCount =
     interactions?.filter((i) => i.action === "resonated").length ?? 0;
   const rejectedCount =
     interactions?.filter((i) => i.action === "not_for_me").length ?? 0;
 
+  const lastTs = [
+    ...(checkIns ?? []).map((c) => c.created_at as string),
+    ...(interactions ?? []).map((i) => i.created_at as string),
+    ...(reviews ?? []).map((r) => r.updated_at as string),
+  ]
+    .filter(Boolean)
+    .sort()
+    .at(-1);
+
   return {
     completedActivities,
+    likedTitles,
+    dislikedTitles,
+    dislikedReasons,
+    avoidIds,
+    lastActivityAt: lastTs ?? null,
     resonatedTopics:
-      resonatedCount > 0
-        ? [`${resonatedCount} recent resonated picks — deepen practical follow-ups`]
-        : [],
+      likedTitles.length > 0
+        ? likedTitles.slice(0, 4)
+        : resonatedCount > 0
+          ? [`${resonatedCount} recent resonated picks — deepen practical follow-ups`]
+          : [],
     rejectedTopics:
-      rejectedCount > 0
-        ? [`${rejectedCount} rejected picks — avoid hype and mismatched tone`]
-        : [],
+      dislikedTitles.length > 0
+        ? dislikedTitles.slice(0, 4)
+        : rejectedCount > 0
+          ? [`${rejectedCount} rejected picks — avoid hype and mismatched tone`]
+          : [],
   };
 }
 
@@ -201,11 +254,21 @@ export async function runCuratorPipeline(input: {
   path: PathRecord;
   learningStyles?: string[];
   checkIn?: string | null;
+  /** Calendar days since last human activity (0 = active) */
+  daysAway?: number;
 }): Promise<DailyBriefingResult> {
   const started = Date.now();
   const learningStyles = input.learningStyles ?? [];
+  const daysAway = input.daysAway ?? 0;
 
   const behavior = await fetchBehaviorSignals(input.userId, input.path.id);
+
+  // Prefer computed gap from last activity if caller didn't pass one
+  let effectiveDaysAway = daysAway;
+  if (!daysAway && behavior.lastActivityAt) {
+    const ms = Date.now() - new Date(behavior.lastActivityAt).getTime();
+    effectiveDaysAway = Math.max(0, Math.floor(ms / (24 * 60 * 60 * 1000)));
+  }
 
   const identity = await buildIdentityQuery({
     path: input.path,
@@ -214,6 +277,10 @@ export async function runCuratorPipeline(input: {
     completedActivities: behavior.completedActivities,
     resonatedTopics: behavior.resonatedTopics,
     rejectedTopics: behavior.rejectedTopics,
+    likedTitles: behavior.likedTitles,
+    dislikedTitles: behavior.dislikedTitles,
+    dislikedReasons: behavior.dislikedReasons,
+    daysAway: effectiveDaysAway,
   });
 
   const [plan, seenIds] = await Promise.all([
@@ -225,6 +292,9 @@ export async function runCuratorPipeline(input: {
     }),
     fetchSeenIds(input.userId, input.path.id),
   ]);
+
+  // Also treat low-rated refs as "seen" so novelty penalizes them
+  for (const id of behavior.avoidIds) seenIds.add(id);
 
   const discovered = await discoverAcrossTypes({
     path: input.path,
@@ -254,6 +324,10 @@ export async function runCuratorPipeline(input: {
     seenIds,
     identityQuery: identity.query,
     vectorScores,
+    avoidIds: behavior.avoidIds,
+    dislikedTitles: behavior.dislikedTitles,
+    likedTitles: behavior.likedTitles,
+    daysAway: effectiveDaysAway,
   });
 
   const diverse = diversifyTypes(ranked, 8);
@@ -297,11 +371,14 @@ export async function runCuratorPipeline(input: {
         final: Number(d.scores.final.toFixed(3)),
       })),
       method: input.path.method,
-      model: `${GROQ_MODEL} + gemini-embedding + youtube/spotify discovery + hybrid reranker`,
+      model: `${GROQ_MODEL} + gemini-embedding + youtube/spotify discovery + hybrid reranker + HITL feedback`,
       latencyMs: Date.now() - started,
       discoverySource: Object.keys(vectorScores).length
-        ? "youtube+spotify+vector"
-        : "youtube+spotify+lexical",
+        ? "youtube+spotify+vector+reviews"
+        : "youtube+spotify+lexical+reviews",
+      daysAway: effectiveDaysAway,
+      avoidedFromReviews: behavior.avoidIds.size,
+      likedFromReviews: behavior.likedTitles.length,
     },
   };
 }

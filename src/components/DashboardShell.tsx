@@ -17,6 +17,7 @@ import {
   Film,
   Home,
   LogOut,
+  Palette,
   PanelRightClose,
   PanelRightOpen,
   Route,
@@ -34,13 +35,13 @@ import {
 export type { AppNotification };
 
 const nav = [
-  { href: "/home", label: "Today", icon: Home },
-  { href: "/media", label: "Discover", icon: Film },
+  { href: "/home", label: "Home", icon: Home },
+  { href: "/media", label: "Curated media", icon: Film },
+  { href: "/artists", label: "Artists", icon: Palette },
   { href: "/paths", label: "Your paths", icon: Route },
   { href: "/settings", label: "Settings", icon: Settings },
   { href: "/architecture", label: "How it works", icon: Compass },
 ];
-
 const LEFT_DEFAULT = 240;
 const LEFT_MIN = 180;
 const LEFT_MAX = 420;

@@ -25,6 +25,18 @@ const QUESTIONS = [
     options: ["Short videos", "Long talks", "Stories", "Frameworks", "Music", "Mentors"],
   },
   {
+    id: "interests",
+    prompt: "Who do you want more of on your path?",
+    options: [
+      "Entrepreneurs",
+      "Artists",
+      "Athletes",
+      "Scientists",
+      "Writers",
+      "Coaches",
+    ],
+  },
+  {
     id: "daily_minutes",
     prompt: "How many minutes can you give this daily?",
     options: ["5", "10", "20", "30", "45+"],

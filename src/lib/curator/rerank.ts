@@ -47,13 +47,27 @@ export function rerankCandidates(input: {
   identityQuery: string;
   /** cosine similarity per candidate id, if embeddings were computed */
   vectorScores?: Record<string, number>;
+  /** Hard-avoid previously low-rated media refs */
+  avoidIds?: Set<string>;
+  /** Titles user disliked — penalize lexical overlap */
+  dislikedTitles?: string[];
+  /** Titles user liked — soft boost */
+  likedTitles?: string[];
+  /** Days since last activity — prefer shorter content when returning */
+  daysAway?: number;
 }): ScoredMedia[] {
   const methodTokens = tokens(input.method);
   const queryTokens = new Set(tokens(input.identityQuery));
   const hasVectors =
     input.vectorScores && Object.keys(input.vectorScores).length > 0;
+  const avoid = input.avoidIds ?? new Set<string>();
+  const disliked = input.dislikedTitles ?? [];
+  const liked = input.likedTitles ?? [];
+  const daysAway = input.daysAway ?? 0;
+  const returner = daysAway >= 2;
 
   return input.candidates
+    .filter((item) => !avoid.has(item.id))
     .map((item) => {
       const blob = `${item.title} ${item.description} ${item.creator ?? ""}`;
       const lexicalIdentity = clamp01(
@@ -81,8 +95,8 @@ export function rerankCandidates(input: {
       );
 
       const mins = item.duration_minutes ?? 8;
-      const durationFit =
-        input.stage === "early"
+      let durationFit =
+        input.stage === "early" || returner
           ? mins <= 12
             ? 1
             : mins <= 20
@@ -91,6 +105,7 @@ export function rerankCandidates(input: {
           : mins >= 5 && mins <= 25
             ? 1
             : 0.55;
+      if (returner && mins > 25) durationFit *= 0.5;
 
       const methodFit = methodTokens.some((t) =>
         blob.toLowerCase().includes(t),
@@ -108,27 +123,38 @@ export function rerankCandidates(input: {
           )
         : 0.6;
 
-      const novelty = input.seenIds.has(item.id) ? 0.2 : 1;
+      // Human-in-the-loop: punish similarity to disliked titles; boost liked
+      const dislikeHit = overlapScore(blob, disliked);
+      const likeHit = overlapScore(blob, liked);
+      const feedbackFit = clamp01(0.55 + 0.45 * likeHit - 0.7 * dislikeHit);
+
+      const novelty =
+        input.seenIds.has(item.id) || avoid.has(item.id) ? 0.15 : 1;
       const antiAttention = CLICKBAIT.test(blob) ? 0.25 : 0.9;
       const potential = clamp01(
-        0.55 * identityFit + 0.25 * semanticProxy + 0.2 * durationFit,
+        0.5 * identityFit +
+          0.2 * semanticProxy +
+          0.15 * durationFit +
+          0.15 * feedbackFit,
       );
 
       const final = hasVectors
-        ? 0.34 * identityFit +
-          0.2 * semanticProxy +
+        ? 0.3 * identityFit +
+          0.16 * semanticProxy +
           0.12 * methodFit +
           0.1 * durationFit +
           0.08 * styleFit +
           0.08 * novelty +
-          0.08 * antiAttention
-        : 0.3 * identityFit +
-          0.18 * semanticProxy +
-          0.14 * methodFit +
+          0.08 * antiAttention +
+          0.08 * feedbackFit
+        : 0.26 * identityFit +
+          0.14 * semanticProxy +
+          0.12 * methodFit +
           0.12 * durationFit +
           0.08 * styleFit +
           0.1 * novelty +
-          0.08 * antiAttention;
+          0.08 * antiAttention +
+          0.1 * feedbackFit;
 
       return {
         ...item,

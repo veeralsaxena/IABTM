@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { DashboardShell } from "@/components/DashboardShell";
 import { MediaPlayer } from "@/components/MediaPlayer";
+import { MediaReviewPanel } from "@/components/MediaReviewPanel";
 import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
 
@@ -61,6 +62,7 @@ export default function MediaPage() {
   const [name, setName] = useState<string | null>(null);
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const [pathLabel, setPathLabel] = useState<string | null>(null);
+  const [pathId, setPathId] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [prefetching, setPrefetching] = useState(false);
@@ -86,11 +88,12 @@ export default function MediaPage() {
       setAvatarUrl(profile?.avatar_url ?? null);
       const { data: path } = await supabase
         .from("paths")
-        .select("me_labels, iam_labels, method")
+        .select("id, me_labels, iam_labels, method")
         .eq("user_id", user.id)
         .eq("status", "active")
         .maybeSingle();
       if (path) {
+        setPathId(path.id);
         setPathLabel(
           `${path.me_labels?.[0] ?? "Me"} → ${path.iam_labels?.[0] ?? "I Am"} · ${path.method}`,
         );
@@ -268,15 +271,22 @@ export default function MediaPage() {
               title={active.title}
               compact={active.media_type === "music"}
             />
-            <div className="p-4">
+            <div className="space-y-3 p-4">
               <div className="text-[11px] uppercase tracking-wide text-zinc-500">
                 {active.media_type}
               </div>
               <h2 className="mt-1 text-2xl font-semibold">{active.title}</h2>
               <p className="mt-2 text-sm text-zinc-500">{active.description}</p>
+              <MediaReviewPanel
+                mediaRef={active.id}
+                mediaTitle={active.title}
+                mediaType={active.media_type}
+                mediaUrl={active.url}
+                pathId={pathId}
+              />
               <button
                 onClick={() => setActive(null)}
-                className="mt-3 text-sm text-zinc-500 underline-offset-2 hover:underline"
+                className="text-sm text-zinc-500 underline-offset-2 hover:underline"
               >
                 Close player
               </button>

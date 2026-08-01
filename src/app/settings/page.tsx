@@ -12,7 +12,7 @@ import {
 import { cn } from "@/lib/utils";
 import { Camera } from "lucide-react";
 
-type Tab = "general" | "paths" | "attributes";
+type Tab = "general" | "paths" | "attributes" | "feedback";
 
 type PathRow = {
   id: string;
@@ -24,6 +24,25 @@ type PathRow = {
   total_days: number;
   status: string;
   created_at: string;
+};
+
+type ReviewRow = {
+  id: string;
+  media_title: string | null;
+  media_type: string | null;
+  rating: number;
+  sentiment: string;
+  review: string;
+  updated_at: string;
+};
+
+type ArtistFbRow = {
+  id: string;
+  artist_name: string | null;
+  rating: number;
+  sentiment: string;
+  note: string | null;
+  updated_at: string;
 };
 
 export default function SettingsPage() {
@@ -38,6 +57,8 @@ export default function SettingsPage() {
   const [iam, setIam] = useState<string[]>([]);
   const [customMe, setCustomMe] = useState("");
   const [customIam, setCustomIam] = useState("");
+  const [reviews, setReviews] = useState<ReviewRow[]>([]);
+  const [artistFb, setArtistFb] = useState<ArtistFbRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
@@ -70,6 +91,25 @@ export default function SettingsPage() {
       setMe(json.activePath.me_labels ?? []);
       setIam(json.activePath.iam_labels ?? []);
     }
+
+    const [{ data: revs }, { data: arts }] = await Promise.all([
+      supabase
+        .from("media_reviews")
+        .select(
+          "id, media_title, media_type, rating, sentiment, review, updated_at",
+        )
+        .eq("user_id", user.id)
+        .order("updated_at", { ascending: false })
+        .limit(20),
+      supabase
+        .from("artist_feedback")
+        .select("id, artist_name, rating, sentiment, note, updated_at")
+        .eq("user_id", user.id)
+        .order("updated_at", { ascending: false })
+        .limit(20),
+    ]);
+    setReviews((revs as ReviewRow[]) ?? []);
+    setArtistFb((arts as ArtistFbRow[]) ?? []);
     setLoading(false);
   }
 
@@ -199,6 +239,7 @@ export default function SettingsPage() {
               ["general", "General"],
               ["paths", "Paths"],
               ["attributes", "Attributes"],
+              ["feedback", "Feedback"],
             ] as const
           ).map(([id, label]) => (
             <button
@@ -429,6 +470,74 @@ export default function SettingsPage() {
             >
               {saving ? "Applying…" : "Apply changes & recurate"}
             </button>
+          </section>
+        )}
+
+        {!loading && tab === "feedback" && (
+          <section className="space-y-5">
+            <div className="rounded-2xl border border-zinc-200 bg-white p-5">
+              <h2 className="text-lg font-semibold">How your feedback trains CURATE</h2>
+              <p className="mt-2 text-sm leading-relaxed text-zinc-500">
+                Low ratings and “not for me” notes are stored and injected into
+                the next identity query + reranker. Disliked media is hard-avoided;
+                disliked artists are hidden. This is the human-in-the-loop.
+              </p>
+            </div>
+
+            <div className="rounded-2xl border border-zinc-200 bg-white p-5">
+              <h3 className="font-semibold">Media reviews</h3>
+              {!reviews.length && (
+                <p className="mt-2 text-sm text-zinc-500">
+                  No reviews yet — rate a pick on Home or Curated media.
+                </p>
+              )}
+              <ul className="mt-3 space-y-3">
+                {reviews.map((r) => (
+                  <li
+                    key={r.id}
+                    className="rounded-xl border border-zinc-100 bg-zinc-50 px-3 py-3"
+                  >
+                    <div className="flex flex-wrap items-center gap-2 text-xs text-zinc-400">
+                      <span className="font-medium text-zinc-700">
+                        {r.rating}/5 · {r.sentiment}
+                      </span>
+                      <span>{r.media_type}</span>
+                    </div>
+                    <div className="mt-1 text-sm font-semibold">
+                      {r.media_title || "Untitled"}
+                    </div>
+                    <p className="mt-1 text-sm text-zinc-500">{r.review}</p>
+                  </li>
+                ))}
+              </ul>
+            </div>
+
+            <div className="rounded-2xl border border-zinc-200 bg-white p-5">
+              <h3 className="font-semibold">Artist / mentor feedback</h3>
+              {!artistFb.length && (
+                <p className="mt-2 text-sm text-zinc-500">
+                  No artist ratings yet — open Artists and tap Like / Not for me.
+                </p>
+              )}
+              <ul className="mt-3 space-y-3">
+                {artistFb.map((a) => (
+                  <li
+                    key={a.id}
+                    className="rounded-xl border border-zinc-100 bg-zinc-50 px-3 py-3"
+                  >
+                    <div className="text-xs text-zinc-400">
+                      {a.rating}/5 · {a.sentiment}
+                    </div>
+                    <div className="mt-1 text-sm font-semibold">
+                      {a.artist_name || "Artist"}
+                    </div>
+                    {a.note && (
+                      <p className="mt-1 text-sm text-zinc-500">{a.note}</p>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            </div>
           </section>
         )}
       </div>

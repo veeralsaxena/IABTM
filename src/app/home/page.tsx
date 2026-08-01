@@ -5,6 +5,12 @@ import Link from "next/link";
 import { DashboardShell } from "@/components/DashboardShell";
 import { StatusPanel } from "@/components/StatusPanel";
 import { MediaPlayer } from "@/components/MediaPlayer";
+import { MediaReviewPanel } from "@/components/MediaReviewPanel";
+import {
+  PostCard,
+  PostComposer,
+  type FeedPost,
+} from "@/components/PostComposer";
 import { createClient } from "@/lib/supabase/client";
 
 type Activity = {
@@ -70,9 +76,14 @@ export default function HomePage() {
   const [data, setData] = useState<BriefingPayload | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [daysAway, setDaysAway] = useState(0);
+  const [returner, setReturner] = useState(false);
+  const [posts, setPosts] = useState<FeedPost[]>([]);
+  const [postsLoading, setPostsLoading] = useState(true);
   const [checkIn, setCheckIn] = useState("");
   const [reflection, setReflection] = useState<string | null>(null);
   const [showCheckIn, setShowCheckIn] = useState(false);
+  const [showBriefing, setShowBriefing] = useState(true);
   const [busy, setBusy] = useState(false);
   const [stats, setStats] = useState({
     curated: "0",
@@ -81,6 +92,14 @@ export default function HomePage() {
     activities: "0",
   });
   const checkInRef = useRef<HTMLTextAreaElement>(null);
+
+  const loadPosts = useCallback(async () => {
+    setPostsLoading(true);
+    const res = await fetch("/api/posts");
+    const json = await res.json();
+    setPostsLoading(false);
+    if (res.ok) setPosts(json.posts ?? []);
+  }, []);
 
   const load = useCallback(async (force = false) => {
     setLoading(true);
@@ -126,9 +145,14 @@ export default function HomePage() {
       .select("*", { count: "exact", head: true })
       .eq("user_id", user.id);
 
+    const { count: reviewCount } = await supabase
+      .from("media_reviews")
+      .select("*", { count: "exact", head: true })
+      .eq("user_id", user.id);
+
     setStats({
       curated: `${viewed ?? 0}`,
-      global: `${viewed ?? 0}`,
+      global: `${(viewed ?? 0) + (reviewCount ?? 0)}`,
       experts: `${pathCount ?? 0} paths`,
       activities: `${doneActs ?? 0}`,
     });
@@ -145,12 +169,15 @@ export default function HomePage() {
       return;
     }
     setData(json);
+    setDaysAway(json.daysAway ?? 0);
+    setReturner(Boolean(json.returner));
     setLoading(false);
   }, []);
 
   useEffect(() => {
     load();
-  }, [load]);
+    loadPosts();
+  }, [load, loadPosts]);
 
   async function interact(
     action: string,
@@ -186,6 +213,13 @@ export default function HomePage() {
     }
   }
 
+  async function deletePost(id: string) {
+    const res = await fetch(`/api/posts?id=${encodeURIComponent(id)}`, {
+      method: "DELETE",
+    });
+    if (res.ok) setPosts((p) => p.filter((x) => x.id !== id));
+  }
+
   const progress = data
     ? Math.min(100, (data.path.day_number / data.path.total_days) * 100)
     : 4;
@@ -201,7 +235,7 @@ export default function HomePage() {
     <DashboardShell
       name={name}
       avatarUrl={avatarUrl}
-      title="Today"
+      title="Home"
       notifications={[
         {
           id: "briefing",
@@ -213,19 +247,30 @@ export default function HomePage() {
           time: "Today",
         },
         {
-          id: "activities",
-          title: "Activities adapt the agent",
-          body: "Mark done to bias tomorrow’s discovery toward what you practiced.",
-          href: "/home",
+          id: "artists",
+          title: "Artists matched",
+          body: "Open Artists for entrepreneurs & mentors from your interests.",
+          href: "/artists",
           time: "Tip",
         },
         {
-          id: "settings",
-          title: "Attributes drive ranking",
-          body: "Change Me / I Am in Settings to rebuild method + media.",
-          href: "/settings",
+          id: "reviews",
+          title: "Reviews train the agent",
+          body: "Rate media after watching — liked / didn’t land feeds tomorrow.",
+          href: "/media",
           time: "Tip",
         },
+        ...(returner
+          ? [
+              {
+                id: "returner",
+                title: `Welcome back · ${daysAway} days away`,
+                body: "We refreshed your briefing with softer re-entry picks and advanced your path day.",
+                href: "/home",
+                time: "Now",
+              },
+            ]
+          : []),
       ]}
       rightPanel={
         data ? (
@@ -257,265 +302,264 @@ export default function HomePage() {
         ) : undefined
       }
     >
-      {loading && (
-        <div className="rounded-2xl border border-zinc-200 bg-white px-6 py-16 text-center">
-          <div className="mx-auto h-1.5 w-40 overflow-hidden rounded-full bg-zinc-100">
-            <div className="h-full w-1/2 animate-pulse rounded-full bg-zinc-900" />
+      <div className="space-y-5">
+        <div className="flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <div className="text-[11px] uppercase tracking-[0.14em] text-zinc-400">
+              Your feed
+            </div>
+            <h1 className="mt-1 font-display text-3xl font-bold tracking-tight">
+              Hey, {name || "there"}
+            </h1>
           </div>
-          <p className="mt-4 text-sm text-zinc-500">
-            Searching the web and ranking for your path…
-          </p>
-        </div>
-      )}
-
-      {error && (
-        <div className="rounded-2xl border border-red-200 bg-red-50 p-6">
-          <p className="text-red-700">{error}</p>
-          <div className="mt-4 flex flex-wrap gap-2">
-            <button
-              onClick={() => load(true)}
-              className="rounded-full bg-zinc-900 px-4 py-2 text-sm text-white"
+          <div className="flex flex-wrap gap-2">
+            <Link
+              href="/artists"
+              className="rounded-full border border-zinc-200 bg-white px-3 py-1.5 text-xs font-medium text-zinc-600 hover:border-zinc-400"
             >
-              Retry search
-            </button>
+              Artists
+            </Link>
             <Link
               href="/paths"
-              className="rounded-full border border-zinc-300 bg-white px-4 py-2 text-sm"
+              className="rounded-full border border-zinc-200 bg-white px-3 py-1.5 text-xs font-medium text-zinc-600 hover:border-zinc-400"
             >
-              Manage paths
+              Switch path
             </Link>
           </div>
         </div>
-      )}
 
-      {data && !loading && (
-        <div className="space-y-6">
-          <section className="rounded-2xl border border-zinc-200/80 bg-white p-4 sm:p-5">
-            <div className="flex flex-wrap items-start justify-between gap-3">
+        {/* Social compose — IABTM-style home */}
+        <PostComposer
+          name={name}
+          avatarUrl={avatarUrl}
+          onPosted={(post) => setPosts((p) => [post, ...p])}
+        />
+
+        {returner && daysAway >= 2 && (
+          <div className="rounded-2xl border border-sky-200 bg-sky-50 px-4 py-4 sm:px-5">
+            <div className="text-[11px] uppercase tracking-[0.14em] text-sky-700/70">
+              Welcome back
+            </div>
+            <h2 className="mt-1 text-lg font-semibold text-sky-950">
+              You were away {daysAway} days — we adapted
+            </h2>
+            <p className="mt-1.5 text-sm leading-relaxed text-sky-900/80">
+              Path day advanced, today’s briefing was refreshed, and picks skew
+              shorter / lower-friction so re-entry feels kind — not punishing.
+              Your past low ratings still block similar content.
+            </p>
+          </div>
+        )}
+
+        {/* Today’s curated pick stays on home */}
+        {loading && (
+          <div className="rounded-2xl border border-zinc-200 bg-white px-6 py-10 text-center text-sm text-zinc-500">
+            Ranking today’s media for your path…
+          </div>
+        )}
+
+        {error && (
+          <div className="rounded-2xl border border-red-200 bg-red-50 p-5">
+            <p className="text-red-700">{error}</p>
+            <button
+              onClick={() => load(true)}
+              className="mt-3 rounded-full bg-zinc-900 px-4 py-2 text-sm text-white"
+            >
+              Retry
+            </button>
+          </div>
+        )}
+
+        {data && !loading && (
+          <section className="overflow-hidden rounded-2xl border border-zinc-200 bg-white">
+            <button
+              type="button"
+              onClick={() => setShowBriefing((s) => !s)}
+              className="flex w-full items-center justify-between gap-3 border-b border-zinc-100 px-4 py-3 text-left sm:px-5"
+            >
               <div>
-                <div className="text-[11px] uppercase tracking-[0.14em] text-zinc-500">
-                  Today&apos;s briefing
+                <div className="text-[11px] uppercase tracking-[0.14em] text-zinc-400">
+                  Today’s curated pick · {data.path.method}
                 </div>
-                <h1 className="mt-1 text-2xl font-semibold tracking-tight sm:text-3xl">
-                  Hey, {name || "there"}
-                </h1>
+                <div className="mt-0.5 text-base font-semibold">
+                  {data.briefing.primary.title}
+                </div>
               </div>
-              <div className="flex flex-wrap gap-2">
-                <Link
-                  href="/paths"
-                  className="rounded-full border border-zinc-200 px-3 py-1.5 text-xs font-medium text-zinc-600 hover:border-zinc-400"
-                >
-                  Switch path
-                </Link>
-                <button
-                  onClick={() => load(true)}
-                  className="rounded-full bg-zinc-900 px-3 py-1.5 text-xs font-medium text-white"
-                >
-                  Recurate from web
-                </button>
-              </div>
-            </div>
+              <span className="text-xs text-zinc-400">
+                {showBriefing ? "Hide" : "Show"}
+              </span>
+            </button>
 
-            <div className="mt-4 grid gap-3 sm:grid-cols-3">
-              <div className="rounded-xl bg-zinc-50 p-3">
-                <div className="text-[10px] uppercase tracking-[0.12em] text-zinc-400">
-                  Better than
-                </div>
-                <div className="mt-1 font-semibold leading-snug">
-                  {data.path.me_labels.join(", ")}
-                </div>
-              </div>
-              <div className="rounded-xl bg-zinc-100 p-3">
-                <div className="text-[10px] uppercase tracking-[0.12em] text-zinc-500/70">
-                  Through
-                </div>
-                <div className="mt-1 font-semibold leading-snug">
-                  {data.path.method}
-                </div>
-              </div>
-              <div className="rounded-xl bg-zinc-50 p-3">
-                <div className="text-[10px] uppercase tracking-[0.12em] text-zinc-400">
-                  Becoming
-                </div>
-                <div className="mt-1 font-semibold leading-snug">
-                  {data.path.iam_labels.join(", ")}
-                </div>
-              </div>
-            </div>
-
-            <div className="mt-4">
-              <div className="mb-1.5 flex justify-between text-[11px] text-zinc-400">
-                <span>
-                  Day {data.path.day_number} / {data.path.total_days}
-                </span>
-                <span>
-                  {data.briefing.discovery?.candidatesFound ??
-                    data.briefing.trace?.retrieved ??
-                    0}{" "}
-                  web candidates ranked
-                </span>
-              </div>
-              <div className="h-1.5 overflow-hidden rounded-full bg-zinc-100">
-                <div
-                  className="h-full rounded-full bg-zinc-900 transition-all"
-                  style={{ width: `${Math.max(progress, 3)}%` }}
+            {showBriefing && (
+              <>
+                <MediaPlayer
+                  url={data.briefing.primary.url}
+                  title={data.briefing.primary.title}
+                  className="rounded-none"
                 />
-              </div>
-              {data.path.method_rationale && (
-                <p className="mt-3 text-sm leading-relaxed text-zinc-500">
-                  {data.path.method_rationale}
-                </p>
-              )}
-            </div>
-          </section>
+                <div className="space-y-4 p-4 sm:p-5">
+                  <div className="flex flex-wrap gap-2 text-xs text-zinc-400">
+                    <span className="rounded-full bg-zinc-100 px-2.5 py-1 font-medium uppercase text-zinc-700">
+                      {data.briefing.primary.media_type}
+                    </span>
+                    {data.briefing.primary.creator && (
+                      <span className="self-center">
+                        {data.briefing.primary.creator}
+                      </span>
+                    )}
+                    <span className="self-center">
+                      Day {data.path.day_number}/{data.path.total_days}
+                    </span>
+                  </div>
+                  <p className="text-sm leading-relaxed text-zinc-500">
+                    {data.briefing.primary.description}
+                  </p>
+                  <p className="rounded-xl bg-zinc-100 px-4 py-3 text-sm leading-relaxed text-zinc-800">
+                    <span className="font-semibold text-zinc-900">Why now: </span>
+                    {data.briefing.whyNow || data.briefing.primary.why}
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    {[
+                      ["viewed", "Mark viewed", "bg-zinc-900 text-white border-zinc-900"],
+                      ["resonated", "Resonated", ""],
+                      ["not_today", "Not today", "text-zinc-500"],
+                      ["not_for_me", "Not for me", "text-zinc-500"],
+                    ].map(([action, label, cls]) => (
+                      <button
+                        key={action}
+                        onClick={() =>
+                          interact(action, data.briefing.primary.id)
+                        }
+                        className={`rounded-full border border-zinc-200 px-4 py-2 text-sm ${cls}`}
+                      >
+                        {label}
+                      </button>
+                    ))}
+                    <button
+                      onClick={() => load(true)}
+                      className="rounded-full border border-zinc-200 px-4 py-2 text-sm text-zinc-500"
+                    >
+                      Recurate
+                    </button>
+                  </div>
 
-          <section className="overflow-hidden rounded-2xl border border-zinc-200/80 bg-white">
-            <div className="border-b border-zinc-100 px-4 py-3 sm:px-5">
-              <div className="text-[11px] uppercase tracking-[0.14em] text-zinc-400">
-                Primary pick · live from the web
-              </div>
-              <h2 className="mt-1 text-xl font-semibold tracking-tight">
-                Watch this now
-              </h2>
-            </div>
-            <MediaPlayer
-              url={data.briefing.primary.url}
-              title={data.briefing.primary.title}
-              className="rounded-none"
-            />
-            <div className="p-4 sm:p-5">
-              <div className="mb-2 flex flex-wrap items-center gap-2">
-                <span className="rounded-full bg-zinc-100 px-2.5 py-1 text-[11px] font-medium uppercase tracking-wide text-zinc-700">
-                  {data.briefing.primary.media_type}
-                </span>
-                {data.briefing.primary.creator && (
-                  <span className="text-xs text-zinc-400">
-                    {data.briefing.primary.creator}
-                  </span>
-                )}
-                {data.briefing.primary.duration_minutes && (
-                  <span className="text-xs text-zinc-400">
-                    {data.briefing.primary.duration_minutes} min
-                  </span>
-                )}
-                {data.briefing.primary.scores?.final != null && (
-                  <span className="rounded-full bg-zinc-900 px-2.5 py-1 text-[11px] text-white">
-                    potential{" "}
-                    {Number(data.briefing.primary.scores.final).toFixed(2)}
-                  </span>
-                )}
-              </div>
-              <h3 className="text-2xl font-semibold tracking-tight">
-                {data.briefing.primary.title}
-              </h3>
-              <p className="mt-2 text-sm leading-relaxed text-zinc-500">
-                {data.briefing.primary.description}
-              </p>
-              <p className="mt-4 rounded-xl bg-zinc-100 px-4 py-3 text-sm leading-relaxed text-zinc-800">
-                <span className="font-semibold text-zinc-900">Why now: </span>
-                {data.briefing.whyNow || data.briefing.primary.why}
-              </p>
-              <div className="mt-4 flex flex-wrap gap-2">
-                {[
-                  ["viewed", "Mark viewed", "bg-zinc-900 text-white border-zinc-900"],
-                  ["resonated", "Resonated", ""],
-                  ["not_today", "Not today", "text-zinc-500"],
-                  ["not_for_me", "Not for me", "text-zinc-500"],
-                ].map(([action, label, cls]) => (
-                  <button
-                    key={action}
-                    onClick={() =>
-                      interact(action, data.briefing.primary.id)
-                    }
-                    className={`rounded-full border border-zinc-200 px-4 py-2 text-sm ${cls}`}
-                  >
-                    {label}
-                  </button>
-                ))}
-              </div>
-            </div>
-          </section>
+                  <MediaReviewPanel
+                    mediaRef={data.briefing.primary.id}
+                    mediaTitle={data.briefing.primary.title}
+                    mediaType={data.briefing.primary.media_type}
+                    mediaUrl={data.briefing.primary.url}
+                    pathId={data.path.id}
+                  />
 
-          {(showCheckIn || reflection) && (
-            <section className="rounded-2xl border border-zinc-200 bg-white p-4 sm:p-5">
-              <h3 className="text-lg font-semibold">Check-in</h3>
-              <textarea
-                ref={checkInRef}
-                value={checkIn}
-                onChange={(e) => setCheckIn(e.target.value)}
-                rows={3}
-                placeholder="What did you practice today?"
-                className="mt-3 w-full resize-none rounded-xl border border-zinc-200 bg-zinc-50 px-4 py-3 text-sm outline-none ring-zinc-900 focus:ring-2"
-              />
-              <button
-                onClick={submitCheckIn}
-                disabled={busy || !checkIn.trim()}
-                className="mt-3 rounded-full bg-zinc-900 px-5 py-2.5 text-sm font-semibold text-white disabled:opacity-40"
-              >
-                {busy ? "Listening…" : "Reflect"}
-              </button>
-              {reflection && (
-                <p className="mt-3 rounded-xl bg-sky-50 px-4 py-3 text-sm text-zinc-700">
-                  {reflection}
-                </p>
-              )}
-            </section>
-          )}
-
-          {data.briefing.secondary.length > 0 && (
-            <section>
-              <div className="mb-3 flex items-end justify-between">
-                <h3 className="text-lg font-semibold tracking-tight">
-                  Also ranked for you
-                </h3>
-                <Link href="/media" className="text-sm text-zinc-700 underline-offset-2 hover:underline">
-                  Browse all types
-                </Link>
-              </div>
-              <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-                {data.briefing.secondary.map((item) => (
-                  <article
-                    key={item.id}
-                    className="overflow-hidden rounded-2xl border border-zinc-200 bg-white"
-                  >
-                    <MediaPlayer
-                      url={item.url}
-                      title={item.title}
-                      className="rounded-none"
+                  <div className="h-1.5 overflow-hidden rounded-full bg-zinc-100">
+                    <div
+                      className="h-full rounded-full bg-zinc-900"
+                      style={{ width: `${Math.max(progress, 3)}%` }}
                     />
-                    <div className="p-3">
-                      <div className="text-[10px] uppercase tracking-wide text-zinc-400">
-                        {item.media_type}
-                        {item.creator ? ` · ${item.creator}` : ""}
-                      </div>
-                      <h4 className="mt-1 line-clamp-2 text-sm font-semibold leading-snug">
-                        {item.title}
-                      </h4>
-                    </div>
-                  </article>
-                ))}
-              </div>
-            </section>
+                  </div>
+                </div>
+              </>
+            )}
+          </section>
+        )}
+
+        {(showCheckIn || reflection) && data && (
+          <section className="rounded-2xl border border-zinc-200 bg-white p-4 sm:p-5">
+            <h3 className="text-lg font-semibold">Check-in</h3>
+            <textarea
+              ref={checkInRef}
+              value={checkIn}
+              onChange={(e) => setCheckIn(e.target.value)}
+              rows={3}
+              placeholder="What did you practice today?"
+              className="mt-3 w-full resize-none rounded-xl border border-zinc-200 bg-zinc-50 px-4 py-3 text-sm outline-none ring-zinc-900 focus:ring-2"
+            />
+            <button
+              onClick={submitCheckIn}
+              disabled={busy || !checkIn.trim()}
+              className="mt-3 rounded-full bg-zinc-900 px-5 py-2.5 text-sm font-semibold text-white disabled:opacity-40"
+            >
+              {busy ? "Listening…" : "Reflect"}
+            </button>
+            {reflection && (
+              <p className="mt-3 rounded-xl bg-sky-50 px-4 py-3 text-sm text-zinc-700">
+                {reflection}
+              </p>
+            )}
+          </section>
+        )}
+
+        {/* Community feed */}
+        <section className="space-y-3">
+          <div className="flex items-end justify-between">
+            <h2 className="text-lg font-semibold tracking-tight">Posts</h2>
+            <span className="text-xs text-zinc-400">
+              {postsLoading ? "Loading…" : `${posts.length} in feed`}
+            </span>
+          </div>
+
+          {!postsLoading && posts.length === 0 && (
+            <div className="rounded-2xl border border-dashed border-zinc-300 bg-white px-6 py-12 text-center">
+              <p className="text-sm text-zinc-500">
+                No posts yet. Share your thoughts with the world — create your
+                first post above.
+              </p>
+            </div>
           )}
 
-          {data.briefing.trace && (
-            <details className="rounded-2xl border border-dashed border-zinc-300 bg-white/60 p-4 text-sm text-zinc-500">
-              <summary className="cursor-pointer font-medium text-zinc-700">
-                Agent trace · how this was chosen
-              </summary>
-              <ul className="mt-3 space-y-1">
-                <li>Stage: {data.briefing.trace.stage}</li>
-                <li>Retrieved from web: {data.briefing.trace.retrieved}</li>
-                <li>Latency: {data.briefing.trace.latencyMs}ms</li>
-                <li>Stack: {data.briefing.trace.model}</li>
-                {data.briefing.trace.discoverySource && (
-                  <li>Sources: {data.briefing.trace.discoverySource}</li>
-                )}
-              </ul>
-            </details>
-          )}
-        </div>
-      )}
+          {posts.map((post) => (
+            <PostCard key={post.id} post={post} onDelete={deletePost} />
+          ))}
+        </section>
+
+        {data && data.briefing.secondary.length > 0 && (
+          <section>
+            <div className="mb-3 flex items-end justify-between">
+              <h3 className="text-lg font-semibold tracking-tight">
+                Also ranked for you
+              </h3>
+              <Link
+                href="/media"
+                className="text-sm text-zinc-700 underline-offset-2 hover:underline"
+              >
+                Curated media
+              </Link>
+            </div>
+            <div className="grid gap-3 sm:grid-cols-2">
+              {data.briefing.secondary.slice(0, 4).map((item) => (
+                <article
+                  key={item.id}
+                  className="overflow-hidden rounded-2xl border border-zinc-200 bg-white"
+                >
+                  <MediaPlayer
+                    url={item.url}
+                    title={item.title}
+                    className="rounded-none"
+                    compact={item.media_type === "music"}
+                  />
+                  <div className="space-y-2 p-3">
+                    <div className="text-[10px] uppercase tracking-wide text-zinc-400">
+                      {item.media_type}
+                      {item.creator ? ` · ${item.creator}` : ""}
+                    </div>
+                    <h4 className="line-clamp-2 text-sm font-semibold leading-snug">
+                      {item.title}
+                    </h4>
+                    <MediaReviewPanel
+                      compact
+                      mediaRef={item.id}
+                      mediaTitle={item.title}
+                      mediaType={item.media_type}
+                      mediaUrl={item.url}
+                      pathId={data.path.id}
+                    />
+                  </div>
+                </article>
+              ))}
+            </div>
+          </section>
+        )}
+      </div>
     </DashboardShell>
   );
 }

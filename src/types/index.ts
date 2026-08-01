@@ -64,6 +64,9 @@ export interface AgentTrace {
   model: string;
   latencyMs: number;
   discoverySource?: string;
+  daysAway?: number;
+  avoidedFromReviews?: number;
+  likedFromReviews?: number;
 }
 
 export type ActivityItem = {

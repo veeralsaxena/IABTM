@@ -43,12 +43,16 @@ export default function ArchitecturePage() {
               "Live YouTube + Spotify embeds (+ DuckDuckGo when reachable). Tabs are session-cached.",
             ],
             [
-              "Hybrid rerank",
-              "Cosine(identity, media embedding) when available, plus lexical method/attribute fit, duration, novelty, anti-clickbait. LLM does not pick the winner.",
+              "Hybrid rerank + human-in-the-loop",
+              "Cosine + lexical rules choose winners. Low ratings / written reviews are stored and used next run: avoid those titles, boost liked ones, and inject dislike reasons into the identity query. LLM does not pick the winner.",
             ],
             [
-              "Explain + act",
-              "Groq writes why-now. Marking activities done feeds the next identity query.",
+              "Explain + act (ReAct loop)",
+              "Observe feedback → Reason (identity + planner) → Act (retrieve/rerank) → Explain → user rates again. That is the closed Reason–Act cycle.",
+            ],
+            [
+              "Return after absence",
+              "If away 2+ days: advance path day, invalidate stale briefing, prefer shorter re-entry content.",
             ],
             [
               "Adapt",
