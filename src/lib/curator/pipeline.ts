@@ -1,7 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { buildIdentityQuery } from "@/lib/curator/identity";
 import { diversify, scoreCandidates } from "@/lib/curator/score";
-import { groqJson } from "@/lib/ai/groq";
+import { groqJson, GROQ_MODEL } from "@/lib/ai/groq";
 import type {
   DailyBriefingResult,
   MediaItem,
@@ -85,10 +85,10 @@ async function explainBriefing(input: {
   checkIn?: string | null;
 }) {
   return groqJson<{ reason: string; whyNow: string; primaryWhy: string }>(
-    `You are the Explainer agent inside an agentic growth curator for IABTM.
+    `You are the Explainer agent inside a growth curator.
 Optimize for human potential, not attention. Be concrete, warm, and brief.
 Return JSON: { "reason": string, "whyNow": string, "primaryWhy": string }.
-No hype. No guilt. Speak to identity becoming.`,
+No hype. No guilt. No brand names. Speak to identity becoming.`,
     JSON.stringify({
       me: input.path.me_labels,
       iam: input.path.iam_labels,
@@ -167,7 +167,7 @@ export async function runCuratorPipeline(input: {
         final: Number(d.scores.final.toFixed(3)),
       })),
       method: input.path.method,
-      model: "llama-3.3-70b-versatile + gemini-text-embedding-004",
+      model: `${GROQ_MODEL} + gemini-embedding-001`,
       latencyMs: Date.now() - started,
     },
   };

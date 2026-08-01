@@ -1,5 +1,8 @@
 import Groq from "groq-sdk";
 
+/** Best available quality model on this Groq account */
+export const GROQ_MODEL = "openai/gpt-oss-120b";
+
 let client: Groq | null = null;
 
 function getGroq() {
@@ -12,7 +15,7 @@ function getGroq() {
 export async function groqJson<T>(
   system: string,
   user: string,
-  model = "llama-3.3-70b-versatile",
+  model = GROQ_MODEL,
 ): Promise<T> {
   const groq = getGroq();
   const completion = await groq.chat.completions.create({
@@ -32,7 +35,7 @@ export async function groqJson<T>(
 export async function groqText(
   system: string,
   user: string,
-  model = "llama-3.3-70b-versatile",
+  model = GROQ_MODEL,
 ): Promise<string> {
   const groq = getGroq();
   const completion = await groq.chat.completions.create({

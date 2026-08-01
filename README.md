@@ -1,52 +1,37 @@
 # CURATE
 
-Agentic media curator for [I Am Better Than Me](https://iambetterthanme.com/) — built for Hack Better Than Me.
+Daily media for who you're becoming — ranked for potential, not attention.
 
-Most feeds optimize for attention. This one picks what helps someone become who they said they want to be.
-
-## What it does
-
-1. You pick **Me** attributes and **I Am** attributes (same idea as IABTM onboarding).
-2. We choose a growth **method** (e.g. Timeboxing).
-3. Every day, an agent loop retrieves + scores media from a pgvector catalog and explains **why this, today**.
-
-Not a chatbot wrapped around a list. Retrieval and ranking are separate from the LLM; the model mostly explains and reflects.
-
-## Run it
+## Run
 
 ```bash
 npm install
-cp .env.example .env.local   # fill in keys
+cp .env.example .env.local   # fill keys
 npm run dev
 ```
 
 Open http://localhost:3000
 
-You’ll need:
+## Env
 
-- Supabase project URL + anon/publishable key
-- `GEMINI_API_KEY` (embeddings)
-- `GROQ_API_KEY` (explanations / check-ins)
+- `NEXT_PUBLIC_SUPABASE_URL`
+- `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` (or anon key)
+- `GEMINI_API_KEY` — embeddings
+- `GROQ_API_KEY` — language agents (`openai/gpt-oss-120b`)
 
-In Supabase → Authentication → Providers → Email, turn off **Confirm email** for local demos.
+Turn off Supabase email confirmation for local demos.
 
-## Useful routes
+## Flow
 
-| Path | What |
-|------|------|
-| `/` | Landing |
-| `/login` | Sign up / sign in |
-| `/onboarding` | Me → I Am → method |
-| `/home` | Today’s briefing |
-| `/media` | Full catalog |
-| `/architecture` | How the system works (for judges) |
+1. Sign up
+2. Profile photo + name
+3. Me / I Am attributes (+ optional questions, skippable)
+4. Method assigned
+5. Home: path bar, embedded video briefing, status panel, activities
+6. Curated Media: filters + inline YouTube player
 
 ## Stack
 
-Next.js · Supabase Auth + Postgres + pgvector · Gemini embeddings · Groq
+Next.js · Supabase Auth/DB/Storage · pgvector · Gemini embeddings · Groq
 
-## Notes
-
-- Don’t commit `.env.local`.
-- `npm run seed` re-embeds the demo catalog if you rebuild the DB (needs Gemini). Prefer leaving the seeded Supabase project as-is during the hackathon.
-- Deploy later to any Node host; set the same env vars and add your domain to Supabase Auth redirect URLs.
+Ranking is deterministic (identity / stage / novelty / anti-attention). The LLM explains — it doesn't invent the catalog.

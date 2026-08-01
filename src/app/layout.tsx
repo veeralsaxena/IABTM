@@ -15,9 +15,9 @@ const manrope = Manrope({
 });
 
 export const metadata: Metadata = {
-  title: "CURATE — Agentic Growth Curator for IABTM",
+  title: "CURATE — Media for who you're becoming",
   description:
-    "An agentic AI curator that optimizes media for human potential — not attention. Built for Hack Better Than Me.",
+    "An agentic curator that picks media for human potential — identity, method, and timing — not attention.",
 };
 
 export default function RootLayout({
@@ -27,7 +27,9 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" className={`${syne.variable} ${manrope.variable} h-full`}>
-      <body className="relative min-h-full antialiased">{children}</body>
+      <body className="relative min-h-full overflow-x-hidden antialiased">
+        {children}
+      </body>
     </html>
   );
 }

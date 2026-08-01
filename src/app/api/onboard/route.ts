@@ -21,6 +21,11 @@ export async function POST(request: Request) {
   const iam = (body.iam as string[]) ?? [];
   const learningStyles = (body.learningStyles as string[]) ?? [];
   const displayName = (body.displayName as string) || undefined;
+  const avatarUrl = (body.avatarUrl as string) || undefined;
+  const vibe = (body.vibe as string) || undefined;
+  const motivation = (body.motivation as string) || undefined;
+  const dailyMinutes = body.dailyMinutes as number | undefined;
+  const answers = (body.answers as Record<string, string>) || {};
 
   if (me.length < 1 || iam.length < 1) {
     return NextResponse.json(
@@ -31,24 +36,27 @@ export async function POST(request: Request) {
 
   const method = pickMethod(me, iam);
   const rationale = await groqText(
-    "You choose growth methods for IABTM. Reply in 2 short sentences explaining why this method fits. No markdown.",
-    `Me: ${me.join(", ")}. I Am: ${iam.join(", ")}. Method: ${method.id}. Blurb: ${method.blurb}`,
+    "You choose personal growth methods. Reply in 2 short sentences explaining why this method fits. No markdown. No brand names.",
+    `Me: ${me.join(", ")}. I Am: ${iam.join(", ")}. Method: ${method.id}. Blurb: ${method.blurb}. Vibe: ${vibe ?? "n/a"}. Motivation: ${motivation ?? "n/a"}.`,
   );
 
-  const identityText = `Becoming from ${me.join(", ")} to ${iam.join(", ")} through ${method.id}. ${method.blurb}`;
+  const identityText = `Becoming from ${me.join(", ")} to ${iam.join(", ")} through ${method.id}. ${method.blurb}. Vibe ${vibe ?? ""}. Prefers ${motivation ?? ""}.`;
   const embedding = await embedText(identityText);
 
   await supabase
     .from("profiles")
     .update({
       display_name: displayName,
+      avatar_url: avatarUrl,
       learning_styles: learningStyles,
+      vibe,
+      motivation,
+      daily_minutes: dailyMinutes ?? null,
       onboarding_complete: true,
       updated_at: new Date().toISOString(),
     })
     .eq("id", user.id);
 
-  // Pause prior paths
   await supabase
     .from("paths")
     .update({ status: "paused" })
@@ -67,6 +75,7 @@ export async function POST(request: Request) {
       total_days: 111,
       progress: 0,
       identity_embedding: embedding,
+      answers,
       status: "active",
     })
     .select("*")
@@ -79,26 +88,31 @@ export async function POST(request: Request) {
     );
   }
 
-  const briefing = await runCuratorPipeline({
-    userId: user.id,
-    path: path as PathRecord,
-    learningStyles,
-  });
+  let briefing = null;
+  try {
+    briefing = await runCuratorPipeline({
+      userId: user.id,
+      path: path as PathRecord,
+      learningStyles,
+    });
 
-  await supabase.from("daily_briefings").upsert(
-    {
-      user_id: user.id,
-      path_id: path.id,
-      briefing_date: new Date().toISOString().slice(0, 10),
-      primary_media_id: briefing.primary.id,
-      secondary_media_ids: briefing.secondary.map((s) => s.id),
-      activity_id: briefing.activity?.id ?? null,
-      reason: briefing.reason,
-      why_now: briefing.whyNow,
-      agent_trace: briefing.trace,
-    },
-    { onConflict: "user_id,path_id,briefing_date" },
-  );
+    await supabase.from("daily_briefings").upsert(
+      {
+        user_id: user.id,
+        path_id: path.id,
+        briefing_date: new Date().toISOString().slice(0, 10),
+        primary_media_id: briefing.primary.id,
+        secondary_media_ids: briefing.secondary.map((s) => s.id),
+        activity_id: briefing.activity?.id ?? null,
+        reason: briefing.reason,
+        why_now: briefing.whyNow,
+        agent_trace: briefing.trace,
+      },
+      { onConflict: "user_id,path_id,briefing_date" },
+    );
+  } catch (e) {
+    console.error("curation during onboard failed", e);
+  }
 
   return NextResponse.json({ path, briefing, method });
 }
