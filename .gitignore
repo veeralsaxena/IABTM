@@ -57,3 +57,4 @@ scripts/seed_activities.sql
 .vscode/
 *.swp
 schema.sql
+schema.sql
