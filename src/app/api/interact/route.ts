@@ -23,11 +23,21 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Invalid action" }, { status: 400 });
   }
 
+  const uuidRe =
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+  const safeActivityId =
+    typeof activityId === "string" && uuidRe.test(activityId)
+      ? activityId
+      : null;
+  // Web-discovered media uses synthetic ids (yt_...), so skip media FK when not UUID.
+  const safeMediaId =
+    typeof mediaId === "string" && uuidRe.test(mediaId) ? mediaId : null;
+
   const { error } = await supabase.from("interactions").insert({
     user_id: user.id,
     path_id: pathId ?? null,
-    media_id: mediaId ?? null,
-    activity_id: activityId ?? null,
+    media_id: safeMediaId,
+    activity_id: safeActivityId,
     action,
   });
 

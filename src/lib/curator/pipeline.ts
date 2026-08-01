@@ -1,13 +1,25 @@
 import { createClient } from "@/lib/supabase/server";
 import { buildIdentityQuery } from "@/lib/curator/identity";
-import { diversify, scoreCandidates } from "@/lib/curator/score";
+import { planDiscoveryQueries } from "@/lib/curator/query-planner";
+import { diversifyTypes, rerankCandidates } from "@/lib/curator/rerank";
+import { discoverForType, toMediaItem } from "@/lib/curator/web-search";
 import { groqJson, GROQ_MODEL } from "@/lib/ai/groq";
 import type {
   DailyBriefingResult,
   MediaItem,
+  MediaType,
   PathRecord,
   ScoredMedia,
 } from "@/types";
+
+const DISCOVER_TYPES: MediaType[] = [
+  "film",
+  "podcast",
+  "people",
+  "editorial",
+  "music",
+  "animation",
+];
 
 async function fetchSeenIds(userId: string, pathId: string) {
   const supabase = await createClient();
@@ -18,64 +30,139 @@ async function fetchSeenIds(userId: string, pathId: string) {
     .eq("path_id", pathId)
     .in("action", ["viewed", "completed", "not_for_me", "saved"]);
 
-  return new Set((data ?? []).map((d) => d.media_id).filter(Boolean) as string[]);
+  return new Set(
+    (data ?? []).map((d) => d.media_id).filter(Boolean) as string[],
+  );
 }
 
-async function retrieveMedia(
-  embedding: number[],
-  method: string,
-  stage: string,
-): Promise<MediaItem[]> {
+/** Agentic memory: activities + resonance reshape the next identity query. */
+async function fetchBehaviorSignals(userId: string, pathId: string) {
   const supabase = await createClient();
-  const { data, error } = await supabase.rpc("match_media", {
-    query_embedding: embedding,
-    match_count: 28,
-    filter_methods: [method, "any"],
-    filter_stage: stage,
-  });
+  const [{ data: checkIns }, { data: interactions }] = await Promise.all([
+    supabase
+      .from("check_ins")
+      .select("body")
+      .eq("user_id", userId)
+      .order("created_at", { ascending: false })
+      .limit(20),
+    supabase
+      .from("interactions")
+      .select("action")
+      .eq("user_id", userId)
+      .eq("path_id", pathId)
+      .in("action", ["resonated", "not_for_me"])
+      .order("created_at", { ascending: false })
+      .limit(20),
+  ]);
 
-  if (error) {
-    // Fallback: plain select if RPC shape differs
-    const fallback = await supabase.from("media").select("*").limit(28);
-    if (fallback.error) throw fallback.error;
-    return (fallback.data ?? []) as MediaItem[];
-  }
+  const completedActivities = (checkIns ?? [])
+    .map((c) => c.body as string)
+    .filter((b) => b?.startsWith("Completed activity:"))
+    .map((b) => b.replace("Completed activity:", "").trim())
+    .filter(Boolean)
+    .slice(0, 8);
 
-  return (data ?? []) as MediaItem[];
+  const resonatedCount =
+    interactions?.filter((i) => i.action === "resonated").length ?? 0;
+  const rejectedCount =
+    interactions?.filter((i) => i.action === "not_for_me").length ?? 0;
+
+  return {
+    completedActivities,
+    resonatedTopics:
+      resonatedCount > 0
+        ? [`${resonatedCount} recent resonated picks — deepen practical follow-ups`]
+        : [],
+    rejectedTopics:
+      rejectedCount > 0
+        ? [`${rejectedCount} rejected picks — avoid hype and mismatched tone`]
+        : [],
+  };
 }
 
-async function pickActivity(path: PathRecord) {
+async function discoverAcrossTypes(input: {
+  path: PathRecord;
+  stage: "early" | "middle" | "late" | "any";
+  learningStyles: string[];
+  queriesByType: Partial<Record<MediaType, string[]>>;
+}): Promise<MediaItem[]> {
+  const batches = await Promise.all(
+    DISCOVER_TYPES.map(async (mediaType) => {
+      const queries = input.queriesByType[mediaType] ?? [
+        `${input.path.method} ${input.path.me_labels[0]} ${input.path.iam_labels[0]}`,
+      ];
+      const found = await discoverForType({ mediaType, queries });
+      return found.map((c) =>
+        toMediaItem(c, {
+          me: input.path.me_labels,
+          iam: input.path.iam_labels,
+          method: input.path.method,
+          stage: input.stage,
+          learningStyles: input.learningStyles,
+        }),
+      );
+    }),
+  );
+  return batches.flat();
+}
+
+async function pickActivities(
+  path: PathRecord,
+  planned: Array<{
+    title: string;
+    description: string;
+    category: string;
+  }>,
+) {
   const supabase = await createClient();
   const { data } = await supabase.from("activities").select("*").limit(40);
-  if (!data?.length) return null;
 
-  const scored = data
-    .map((a) => {
-      const methodHit = (a.methods ?? []).some(
-        (m: string) =>
-          m.toLowerCase() === path.method.toLowerCase() ||
-          m.toLowerCase() === "any",
-      )
-        ? 2
-        : 0;
-      const fromHit = path.me_labels.filter((l) =>
-        (a.from_attrs ?? []).includes(l),
-      ).length;
-      const toHit = path.iam_labels.filter((l) =>
-        (a.to_attrs ?? []).includes(l),
-      ).length;
-      return { a, score: methodHit + fromHit + toHit };
-    })
-    .sort((x, y) => y.score - x.score);
+  const fromDb =
+    data
+      ?.map((a) => {
+        const methodHit = (a.methods ?? []).some(
+          (m: string) =>
+            m.toLowerCase() === path.method.toLowerCase() ||
+            m.toLowerCase() === "any",
+        )
+          ? 2
+          : 0;
+        const fromHit = path.me_labels.filter((l) =>
+          (a.from_attrs ?? []).includes(l),
+        ).length;
+        const toHit = path.iam_labels.filter((l) =>
+          (a.to_attrs ?? []).includes(l),
+        ).length;
+        return {
+          id: a.id as string,
+          title: a.title as string,
+          description: (a.description as string) ?? null,
+          category: (a.category as string) ?? null,
+          score: methodHit + fromHit + toHit,
+        };
+      })
+      .sort((x, y) => y.score - x.score)
+      .slice(0, 3)
+      .map(({ id, title, description, category }) => ({
+        id,
+        title,
+        description,
+        category,
+      })) ?? [];
 
-  const top = scored[0]?.a;
-  if (!top) return null;
-  return {
-    id: top.id as string,
-    title: top.title as string,
-    description: (top.description as string) ?? null,
-    category: (top.category as string) ?? null,
-  };
+  const generated = planned.slice(0, 6).map((a, i) => ({
+    id: `act_${i}_${a.title.toLowerCase().replace(/\s+/g, "_").slice(0, 24)}`,
+    title: a.title,
+    description: a.description,
+    category: a.category,
+  }));
+
+  const merged = [...fromDb];
+  for (const g of generated) {
+    if (merged.length >= 5) break;
+    if (!merged.some((m) => m.title === g.title)) merged.push(g);
+  }
+  return merged.slice(0, 5);
 }
 
 async function explainBriefing(input: {
@@ -100,6 +187,7 @@ No hype. No guilt. No brand names. Speak to identity becoming.`,
         type: input.primary.media_type,
         scores: input.primary.scores,
         description: input.primary.description,
+        url: input.primary.url,
       },
       alternatives: input.secondary.map((s) => s.title),
     }),
@@ -113,34 +201,60 @@ export async function runCuratorPipeline(input: {
   checkIn?: string | null;
 }): Promise<DailyBriefingResult> {
   const started = Date.now();
+  const learningStyles = input.learningStyles ?? [];
+
+  const behavior = await fetchBehaviorSignals(input.userId, input.path.id);
+
   const identity = await buildIdentityQuery({
     path: input.path,
     checkIn: input.checkIn,
-    learningStyles: input.learningStyles,
+    learningStyles,
+    completedActivities: behavior.completedActivities,
+    resonatedTopics: behavior.resonatedTopics,
+    rejectedTopics: behavior.rejectedTopics,
   });
 
-  const [candidates, seenIds, activity] = await Promise.all([
-    retrieveMedia(identity.embedding, input.path.method, identity.stage),
+  const [plan, seenIds] = await Promise.all([
+    planDiscoveryQueries({
+      path: input.path,
+      stage: identity.stage,
+      learningStyles,
+      checkIn: input.checkIn,
+    }),
     fetchSeenIds(input.userId, input.path.id),
-    pickActivity(input.path),
   ]);
 
-  const ranked = scoreCandidates({
-    candidates,
+  const discovered = await discoverAcrossTypes({
+    path: input.path,
+    stage: identity.stage,
+    learningStyles,
+    queriesByType: plan.queriesByType,
+  });
+
+  if (!discovered.length) {
+    throw new Error(
+      "Web discovery returned no results. Check network access and try Recurate.",
+    );
+  }
+
+  const ranked = rerankCandidates({
+    candidates: discovered,
     me: input.path.me_labels,
     iam: input.path.iam_labels,
     method: input.path.method,
     stage: identity.stage,
-    learningStyles: input.learningStyles ?? [],
+    learningStyles,
     seenIds,
+    identityQuery: identity.query,
   });
 
-  const diverse = diversify(ranked, 6);
+  const diverse = diversifyTypes(ranked, 8);
   const primary = diverse[0];
   if (!primary) {
-    throw new Error("No media candidates available. Seed the catalog first.");
+    throw new Error("No media candidates after reranking.");
   }
-  const secondary = diverse.slice(1, 4);
+  const secondary = diverse.slice(1, 5);
+  const activities = await pickActivities(input.path, plan.activities);
 
   const explanation = await explainBriefing({
     path: input.path,
@@ -154,21 +268,74 @@ export async function runCuratorPipeline(input: {
   return {
     primary,
     secondary,
-    activity,
+    activity: activities[0] ?? null,
+    activities,
     reason: explanation.reason,
     whyNow: explanation.whyNow,
+    discovery: {
+      source: "web",
+      queries: Object.fromEntries(
+        Object.entries(plan.queriesByType).map(([k, v]) => [k, v ?? []]),
+      ),
+      candidatesFound: discovered.length,
+    },
     trace: {
       identityQuery: identity.query,
       stage: identity.stage,
-      retrieved: candidates.length,
+      retrieved: discovered.length,
       ranked: diverse.map((d) => ({
         id: d.id,
         title: d.title,
         final: Number(d.scores.final.toFixed(3)),
       })),
       method: input.path.method,
-      model: `${GROQ_MODEL} + gemini-embedding-001`,
+      model: `${GROQ_MODEL} + youtube/web discovery + self-reranker`,
       latencyMs: Date.now() - started,
+      discoverySource: "youtube+duckduckgo",
     },
   };
+}
+
+export async function discoverCategory(input: {
+  userId: string;
+  path: PathRecord;
+  mediaType: MediaType;
+  learningStyles?: string[];
+}) {
+  const identity = await buildIdentityQuery({
+    path: input.path,
+    learningStyles: input.learningStyles,
+  });
+  const plan = await planDiscoveryQueries({
+    path: input.path,
+    stage: identity.stage,
+    learningStyles: input.learningStyles,
+  });
+  const queries = plan.queriesByType[input.mediaType] ?? [
+    `${input.path.method} ${input.path.me_labels[0]}`,
+  ];
+  const found = await discoverForType({
+    mediaType: input.mediaType,
+    queries,
+  });
+  const candidates = found.map((c) =>
+    toMediaItem(c, {
+      me: input.path.me_labels,
+      iam: input.path.iam_labels,
+      method: input.path.method,
+      stage: identity.stage,
+      learningStyles: input.learningStyles ?? [],
+    }),
+  );
+  const seenIds = await fetchSeenIds(input.userId, input.path.id);
+  return rerankCandidates({
+    candidates,
+    me: input.path.me_labels,
+    iam: input.path.iam_labels,
+    method: input.path.method,
+    stage: identity.stage,
+    learningStyles: input.learningStyles ?? [],
+    seenIds,
+    identityQuery: identity.query,
+  });
 }

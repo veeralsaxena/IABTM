@@ -1,7 +1,18 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { runCuratorPipeline } from "@/lib/curator/pipeline";
-import type { PathRecord } from "@/types";
+import type { DailyBriefingResult, PathRecord } from "@/types";
+
+type CachedPayload = {
+  primary: DailyBriefingResult["primary"];
+  secondary: DailyBriefingResult["secondary"];
+  activity: DailyBriefingResult["activity"];
+  activities: DailyBriefingResult["activities"];
+  reason: string;
+  whyNow: string;
+  discovery?: DailyBriefingResult["discovery"];
+  trace: DailyBriefingResult["trace"];
+};
 
 export async function POST(request: Request) {
   const supabase = await createClient();
@@ -38,39 +49,23 @@ export async function POST(request: Request) {
       .eq("briefing_date", today)
       .maybeSingle();
 
-    if (existing) {
-      const ids = [
-        existing.primary_media_id,
-        ...(existing.secondary_media_ids ?? []),
-      ].filter(Boolean) as string[];
+    const cached = existing?.agent_trace as
+      | (CachedPayload & { _cachedBriefing?: boolean })
+      | null;
 
-      const { data: media } = await supabase
-        .from("media")
-        .select("*")
-        .in("id", ids);
-
-      const { data: activity } = existing.activity_id
-        ? await supabase
-            .from("activities")
-            .select("*")
-            .eq("id", existing.activity_id)
-            .maybeSingle()
-        : { data: null };
-
-      const primary = media?.find((m) => m.id === existing.primary_media_id);
-      const secondary =
-        media?.filter((m) => m.id !== existing.primary_media_id) ?? [];
-
+    if (existing && cached?._cachedBriefing && cached.primary) {
       return NextResponse.json({
         cached: true,
         path,
         briefing: {
-          primary,
-          secondary,
-          activity,
-          reason: existing.reason,
-          whyNow: existing.why_now,
-          trace: existing.agent_trace,
+          primary: cached.primary,
+          secondary: cached.secondary ?? [],
+          activity: cached.activity ?? null,
+          activities: cached.activities ?? (cached.activity ? [cached.activity] : []),
+          reason: existing.reason ?? cached.reason,
+          whyNow: existing.why_now ?? cached.whyNow,
+          discovery: cached.discovery,
+          trace: cached.trace,
         },
       });
     }
@@ -97,17 +92,29 @@ export async function POST(request: Request) {
     checkIn: latestCheckIn?.body,
   });
 
+  const cachePayload: CachedPayload & { _cachedBriefing: true } = {
+    _cachedBriefing: true,
+    primary: briefing.primary,
+    secondary: briefing.secondary,
+    activity: briefing.activity,
+    activities: briefing.activities,
+    reason: briefing.reason,
+    whyNow: briefing.whyNow,
+    discovery: briefing.discovery,
+    trace: briefing.trace,
+  };
+
   await supabase.from("daily_briefings").upsert(
     {
       user_id: user.id,
       path_id: path.id,
       briefing_date: today,
-      primary_media_id: briefing.primary.id,
-      secondary_media_ids: briefing.secondary.map((s) => s.id),
-      activity_id: briefing.activity?.id ?? null,
+      primary_media_id: null,
+      secondary_media_ids: [],
+      activity_id: null,
       reason: briefing.reason,
       why_now: briefing.whyNow,
-      agent_trace: briefing.trace,
+      agent_trace: cachePayload,
     },
     { onConflict: "user_id,path_id,briefing_date" },
   );

@@ -16,15 +16,23 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Check-in text required" }, { status: 400 });
   }
 
-  const analysis = await groqJson<{
-    sentiment: number;
-    growth_signal: string;
-    reflection: string;
-  }>(
-    `Analyze a personal growth check-in. Return JSON:
+  const isActivityLog = body.startsWith("Completed activity:");
+
+  const analysis = isActivityLog
+    ? {
+        sentiment: 0.6,
+        growth_signal: "momentum",
+        reflection: "Logged. Tomorrow’s curation will lean into what you practiced.",
+      }
+    : await groqJson<{
+        sentiment: number;
+        growth_signal: string;
+        reflection: string;
+      }>(
+        `Analyze a personal growth check-in. Return JSON:
 { "sentiment": number from -1 to 1, "growth_signal": "momentum"|"struggle"|"neutral"|"breakthrough", "reflection": one warm sentence mirroring their words }.`,
-    body,
-  );
+        body,
+      );
 
   const { data, error } = await supabase
     .from("check_ins")

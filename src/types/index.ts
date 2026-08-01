@@ -63,18 +63,27 @@ export interface AgentTrace {
   method: string;
   model: string;
   latencyMs: number;
+  discoverySource?: string;
 }
+
+export type ActivityItem = {
+  id: string;
+  title: string;
+  description: string | null;
+  category: string | null;
+};
 
 export interface DailyBriefingResult {
   primary: ScoredMedia;
   secondary: ScoredMedia[];
-  activity: {
-    id: string;
-    title: string;
-    description: string | null;
-    category: string | null;
-  } | null;
+  activity: ActivityItem | null;
+  activities: ActivityItem[];
   reason: string;
   whyNow: string;
+  discovery?: {
+    source: string;
+    queries: Record<string, string[]>;
+    candidatesFound: number;
+  };
   trace: AgentTrace;
 }

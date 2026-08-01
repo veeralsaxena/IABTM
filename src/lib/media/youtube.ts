@@ -23,7 +23,7 @@ export function youtubeIdFromUrl(url?: string | null): string | null {
 export function youtubeEmbedUrl(url?: string | null): string | null {
   const id = youtubeIdFromUrl(url);
   if (!id) return null;
-  return `https://www.youtube.com/embed/${id}?rel=0&modestbranding=1`;
+  return `https://www.youtube-nocookie.com/embed/${id}?rel=0&modestbranding=1`;
 }
 
 export function youtubeThumb(url?: string | null): string | null {

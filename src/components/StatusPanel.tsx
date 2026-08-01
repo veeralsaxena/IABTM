@@ -1,6 +1,16 @@
 "use client";
 
-import { CheckCircle2, Flame, Film, Globe, RefreshCw, Users } from "lucide-react";
+import {
+  CheckCircle2,
+  Flame,
+  Film,
+  Globe,
+  RefreshCw,
+  Trees,
+  Users,
+} from "lucide-react";
+import { useState } from "react";
+import { cn } from "@/lib/utils";
 
 type Activity = {
   id: string;
@@ -15,7 +25,7 @@ export function StatusPanel({
   checkInPrompt,
   onCheckInClick,
   stats,
-  activity,
+  activities = [],
   onMarkDone,
   onRefresh,
 }: {
@@ -29,15 +39,29 @@ export function StatusPanel({
     experts: string;
     activities: string;
   };
-  activity?: Activity | null;
-  onMarkDone?: () => void;
+  activities?: Activity[];
+  onMarkDone?: (activityId: string) => void | Promise<void>;
   onRefresh?: () => void;
 }) {
+  const [done, setDone] = useState<Set<string>>(new Set());
+  const [busyId, setBusyId] = useState<string | null>(null);
+
+  async function mark(id: string) {
+    if (done.has(id) || busyId) return;
+    setBusyId(id);
+    try {
+      await onMarkDone?.(id);
+      setDone((prev) => new Set(prev).add(id));
+    } finally {
+      setBusyId(null);
+    }
+  }
+
   return (
-    <div className="sticky top-4 space-y-4">
-      <div className="rounded-3xl bg-zinc-900 p-5 text-white shadow-lg">
+    <div className="sticky top-3 space-y-3">
+      <div className="rounded-2xl bg-[#171717] p-4 text-white shadow-md">
         <div className="flex items-center justify-between text-xs text-zinc-400">
-          <span>You&apos;re currently at</span>
+          <span>Active path</span>
           <button
             type="button"
             onClick={onRefresh}
@@ -47,22 +71,22 @@ export function StatusPanel({
             <RefreshCw className="h-3.5 w-3.5" />
           </button>
         </div>
-        <h2 className="mt-2 text-[17px] font-semibold leading-snug tracking-tight">
-          {dayNumber} days on path {pathLabel}
+        <h2 className="mt-2 text-[15px] font-semibold leading-snug tracking-tight">
+          Day {dayNumber} · {pathLabel}
         </h2>
 
         <button
           type="button"
           onClick={onCheckInClick}
-          className="mt-4 flex w-full items-center gap-3 rounded-2xl bg-zinc-800 px-3 py-3 text-left transition hover:bg-zinc-700"
+          className="mt-3 flex w-full items-center gap-3 rounded-xl bg-white/5 px-3 py-2.5 text-left transition hover:bg-white/10"
         >
-          <div className="flex h-9 w-9 items-center justify-center rounded-full bg-amber-100/90 text-zinc-900">
+          <div className="flex h-8 w-8 items-center justify-center rounded-full bg-amber-200 text-zinc-900">
             ✦
           </div>
           <div className="min-w-0 flex-1">
-            <div className="text-[11px] text-zinc-400">Today&apos;s check-in</div>
+            <div className="text-[11px] text-zinc-400">Check-in</div>
             <div className="truncate text-sm">
-              {checkInPrompt || "Have you spent a moment on your practice?"}
+              {checkInPrompt || "Did you practice today?"}
             </div>
           </div>
           <div className="flex items-center gap-1 text-orange-400">
@@ -71,18 +95,40 @@ export function StatusPanel({
           </div>
         </button>
 
-        <ul className="mt-5 space-y-3">
+        <ul className="mt-4 space-y-2.5">
           {[
-            { icon: Film, label: "Curated Media", value: stats.curated, color: "bg-sky-400/20 text-sky-300" },
-            { icon: Globe, label: "Global Media Viewed", value: stats.global, color: "bg-indigo-400/20 text-indigo-300" },
-            { icon: Users, label: "Expert consultation", value: stats.experts, color: "bg-fuchsia-400/20 text-fuchsia-300" },
-            { icon: CheckCircle2, label: "Activities completed", value: stats.activities, color: "bg-emerald-400/20 text-emerald-300" },
+            {
+              icon: Film,
+              label: "Media engaged",
+              value: stats.curated,
+              color: "bg-sky-400/20 text-sky-300",
+            },
+            {
+              icon: Globe,
+              label: "Web discoveries",
+              value: stats.global,
+              color: "bg-zinc-500/30 text-zinc-200",
+            },
+            {
+              icon: Users,
+              label: "Mentors found",
+              value: stats.experts,
+              color: "bg-violet-400/20 text-violet-300",
+            },
+            {
+              icon: CheckCircle2,
+              label: "Activities done",
+              value: `${Number(stats.activities) + done.size}`,
+              color: "bg-emerald-400/20 text-emerald-300",
+            },
           ].map((row) => {
             const Icon = row.icon;
             return (
               <li key={row.label} className="flex items-center gap-3 text-sm">
-                <div className={`flex h-8 w-8 items-center justify-center rounded-full ${row.color}`}>
-                  <Icon className="h-4 w-4" />
+                <div
+                  className={`flex h-7 w-7 items-center justify-center rounded-full ${row.color}`}
+                >
+                  <Icon className="h-3.5 w-3.5" />
                 </div>
                 <span className="flex-1 text-zinc-200">{row.label}</span>
                 <span className="tabular-nums text-zinc-400">{row.value}</span>
@@ -92,45 +138,67 @@ export function StatusPanel({
         </ul>
       </div>
 
-      <div className="rounded-3xl bg-zinc-900 p-5 text-white">
+      <div className="rounded-2xl bg-[#171717] p-4 text-white">
         <div className="flex items-center justify-between">
           <div>
-            <div className="text-xs text-zinc-400">Suggested activities</div>
-            <div className="mt-1 text-lg font-semibold">Give it a shot</div>
+            <div className="text-xs text-zinc-400">Do these next</div>
+            <div className="mt-0.5 text-base font-semibold">Activities</div>
           </div>
-          <button
-            type="button"
-            onClick={onRefresh}
-            className="rounded-lg p-1.5 text-zinc-400 hover:bg-white/10 hover:text-white"
-          >
-            <RefreshCw className="h-4 w-4" />
-          </button>
+          <Trees className="h-4 w-4 text-zinc-300" />
         </div>
 
-        {activity ? (
-          <div className="mt-4 rounded-2xl bg-zinc-800 p-3">
-            <div className="text-[11px] uppercase tracking-wide text-zinc-400">
-              {activity.category || "Practice"}
-            </div>
-            <div className="mt-1 text-sm font-medium leading-snug">
-              {activity.title}
-            </div>
-            {activity.description && (
-              <p className="mt-1 text-xs leading-relaxed text-zinc-400">
-                {activity.description}
-              </p>
-            )}
-            <button
-              type="button"
-              onClick={onMarkDone}
-              className="mt-3 w-full rounded-full bg-sky-500 py-2 text-sm font-semibold text-white hover:bg-sky-400"
-            >
-              Mark done
-            </button>
-          </div>
-        ) : (
-          <p className="mt-4 text-sm text-zinc-400">No activity suggested yet.</p>
-        )}
+        <div className="mt-3 space-y-2">
+          {activities.length ? (
+            activities.map((activity) => {
+              const isDone = done.has(activity.id);
+              return (
+                <div
+                  key={activity.id}
+                  className={cn(
+                    "rounded-xl bg-white/5 p-3 transition",
+                    isDone && "opacity-60",
+                  )}
+                >
+                  <div className="text-[10px] uppercase tracking-wide text-zinc-400">
+                    {activity.category || "Practice"}
+                  </div>
+                  <div
+                    className={cn(
+                      "mt-1 text-sm font-medium leading-snug",
+                      isDone && "line-through",
+                    )}
+                  >
+                    {activity.title}
+                  </div>
+                  {activity.description && (
+                    <p className="mt-1 text-xs leading-relaxed text-zinc-400">
+                      {activity.description}
+                    </p>
+                  )}
+                  <button
+                    type="button"
+                    disabled={isDone || busyId === activity.id}
+                    onClick={() => mark(activity.id)}
+                    className={cn(
+                      "mt-2.5 w-full rounded-full py-1.5 text-xs font-semibold",
+                      isDone
+                        ? "bg-white/10 text-zinc-300"
+                        : "bg-white text-zinc-900 hover:bg-zinc-100",
+                    )}
+                  >
+                    {isDone
+                      ? "Done ✓ — will shape tomorrow’s media"
+                      : busyId === activity.id
+                        ? "Saving…"
+                        : "Mark done"}
+                  </button>
+                </div>
+              );
+            })
+          ) : (
+            <p className="text-sm text-zinc-400">No activities yet — recurate.</p>
+          )}
+        </div>
       </div>
     </div>
   );

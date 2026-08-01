@@ -1,8 +1,8 @@
 "use client";
 
 import Image from "next/image";
-import { useMemo, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
+import { Suspense, useEffect, useMemo, useRef, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import {
   ASPIRATIONAL_ATTRIBUTES,
@@ -33,8 +33,10 @@ const QUESTIONS = [
 
 type Step = "profile" | "attributes" | "questions" | "method";
 
-export default function OnboardingPage() {
+function OnboardingInner() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const isNewPath = searchParams.get("mode") === "new";
   const fileRef = useRef<HTMLInputElement>(null);
   const [step, setStep] = useState<Step>("profile");
   const [displayName, setDisplayName] = useState("");
@@ -52,6 +54,30 @@ export default function OnboardingPage() {
   const [showAllIam, setShowAllIam] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    (async () => {
+      const supabase = createClient();
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) {
+        window.location.href = "/login";
+        return;
+      }
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("display_name, avatar_url, onboarding_complete")
+        .eq("id", user.id)
+        .maybeSingle();
+      if (profile?.display_name) setDisplayName(profile.display_name);
+      if (profile?.avatar_url) setAvatarUrl(profile.avatar_url);
+      // Already signed in + creating another path: skip photo/name wizard.
+      if (isNewPath && profile?.onboarding_complete) {
+        setStep("attributes");
+      }
+    })();
+  }, [isNewPath]);
 
   const method = useMemo(() => pickMethod(me, iam), [me, iam]);
 
@@ -126,14 +152,21 @@ export default function OnboardingPage() {
         <div>
           <div className="font-display text-2xl font-bold">CURATE</div>
           <div className="text-[10px] uppercase tracking-[0.18em] text-zinc-400">
-            Build your path
+            {isNewPath ? "Add another path" : "Build your path"}
           </div>
         </div>
-        <div className="text-sm text-zinc-500">
-          {step === "profile" && "1 / 4"}
-          {step === "attributes" && "2 / 4"}
-          {step === "questions" && "3 / 4"}
-          {step === "method" && "4 / 4"}
+        <div className="flex items-center gap-3 text-sm text-zinc-500">
+          {isNewPath && (
+            <a href="/paths" className="underline-offset-2 hover:underline">
+              Back to paths
+            </a>
+          )}
+          <span>
+            {step === "profile" && "1 / 4"}
+            {step === "attributes" && "2 / 4"}
+            {step === "questions" && "3 / 4"}
+            {step === "method" && "4 / 4"}
+          </span>
         </div>
       </header>
 
@@ -226,8 +259,14 @@ export default function OnboardingPage() {
                 custom={customMe}
                 setCustom={setCustomMe}
                 onAddCustom={() => {
-                  if (!customMe.trim()) return;
-                  toggle(me, setMe, customMe.trim());
+                  const value = customMe.trim();
+                  if (!value) return;
+                  if (me.includes(value)) {
+                    setCustomMe("");
+                    return;
+                  }
+                  if (me.length >= 5) return;
+                  setMe([...me, value]);
                   setCustomMe("");
                 }}
               />
@@ -247,8 +286,14 @@ export default function OnboardingPage() {
                 custom={customIam}
                 setCustom={setCustomIam}
                 onAddCustom={() => {
-                  if (!customIam.trim()) return;
-                  toggle(iam, setIam, customIam.trim());
+                  const value = customIam.trim();
+                  if (!value) return;
+                  if (iam.includes(value)) {
+                    setCustomIam("");
+                    return;
+                  }
+                  if (iam.length >= 5) return;
+                  setIam([...iam, value]);
                   setCustomIam("");
                 }}
               />
@@ -436,6 +481,20 @@ function AttributeColumn(props: {
   setCustom: (v: string) => void;
   onAddCustom: () => void;
 }) {
+  const [justAdded, setJustAdded] = useState<string | null>(null);
+  function handleAdd() {
+    const value = props.custom.trim();
+    if (!value) return;
+    if (props.selected.length >= 5 && !props.selected.includes(value)) {
+      setJustAdded("__full__");
+      setTimeout(() => setJustAdded(null), 2000);
+      return;
+    }
+    props.onAddCustom();
+    setJustAdded(value);
+    setTimeout(() => setJustAdded(null), 2000);
+  }
+
   return (
     <div className="rounded-[28px] border border-zinc-200 bg-white p-5 md:p-6">
       <div
@@ -448,6 +507,32 @@ function AttributeColumn(props: {
       </div>
       <h2 className="font-display text-3xl font-bold">{props.title}</h2>
       <p className="text-sm text-zinc-500">{props.subtitle}</p>
+
+      {props.selected.length > 0 && (
+        <div className="mt-4 rounded-2xl bg-zinc-50 p-3">
+          <div className="text-[11px] uppercase tracking-[0.14em] text-zinc-400">
+            Selected ({props.selected.length}/5)
+          </div>
+          <div className="mt-2 flex flex-wrap gap-2">
+            {props.selected.map((opt) => (
+              <button
+                key={`sel-${opt}`}
+                type="button"
+                onClick={() => props.onToggle(opt)}
+                className={cn(
+                  "rounded-full border px-3 py-1.5 text-sm leading-none",
+                  props.tone === "iam"
+                    ? "border-zinc-900 bg-zinc-900 text-white"
+                    : "border-zinc-900 bg-zinc-900 text-white",
+                )}
+                title="Click to remove"
+              >
+                {opt} ×
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       <input
         value={props.query}
@@ -465,9 +550,7 @@ function AttributeColumn(props: {
             className={cn(
               "rounded-full border px-3 py-1.5 text-sm leading-none",
               props.selected.includes(opt)
-                ? props.tone === "iam"
-                  ? "border-emerald-800 bg-emerald-800 text-white"
-                  : "border-zinc-900 bg-zinc-900 text-white"
+                ? "border-zinc-900 bg-zinc-900 text-white"
                 : "border-zinc-200 bg-white text-zinc-800",
             )}
           >
@@ -494,18 +577,50 @@ function AttributeColumn(props: {
           <input
             value={props.custom}
             onChange={(e) => props.setCustom(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                handleAdd();
+              }
+            }}
             placeholder="Type anything that feels right"
             className="min-w-0 flex-1 rounded-xl border border-zinc-200 px-3 py-2 text-sm outline-none"
           />
           <button
             type="button"
-            onClick={props.onAddCustom}
+            onClick={handleAdd}
             className="rounded-xl bg-zinc-800 px-4 py-2 text-sm text-white"
           >
             Add
           </button>
         </div>
+        {justAdded && justAdded !== "__full__" && (
+          <p className="mt-2 text-sm font-medium text-zinc-800">
+            Added “{justAdded}”. It appears in Selected above.
+          </p>
+        )}
+        {justAdded === "__full__" && (
+          <p className="mt-2 text-sm text-amber-700">
+            You already have 5 attributes. Remove one to add another.
+          </p>
+        )}
       </div>
     </div>
+  );
+}
+
+
+
+export default function OnboardingPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex min-h-screen items-center justify-center text-zinc-500">
+          Loading…
+        </div>
+      }
+    >
+      <OnboardingInner />
+    </Suspense>
   );
 }

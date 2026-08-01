@@ -6,7 +6,17 @@ export async function buildIdentityQuery(input: {
   path: PathRecord;
   checkIn?: string | null;
   learningStyles?: string[];
-}): Promise<{ query: string; embedding: number[]; vectorLiteral: string; stage: ReturnType<typeof journeyStage> }> {
+  /** Recently completed activity titles — agentic signal */
+  completedActivities?: string[];
+  /** Soft preference signals from feedback */
+  resonatedTopics?: string[];
+  rejectedTopics?: string[];
+}): Promise<{
+  query: string;
+  embedding: number[];
+  vectorLiteral: string;
+  stage: ReturnType<typeof journeyStage>;
+}> {
   const stage = journeyStage(input.path.day_number, input.path.total_days);
 
   const stageGuidance =
@@ -26,6 +36,15 @@ export async function buildIdentityQuery(input: {
       ? `Preferred learning styles: ${input.learningStyles.join(", ")}.`
       : "",
     input.checkIn ? `Latest check-in: ${input.checkIn}` : "",
+    input.completedActivities?.length
+      ? `Recently practiced activities: ${input.completedActivities.join("; ")}. Prefer media that deepens or builds on these practices.`
+      : "",
+    input.resonatedTopics?.length
+      ? `User resonated with: ${input.resonatedTopics.join(", ")}. Bias toward similar tone and depth.`
+      : "",
+    input.rejectedTopics?.length
+      ? `User rejected: ${input.rejectedTopics.join(", ")}. Avoid similar clickbait or mismatched tone.`
+      : "",
     "Optimize for human potential and identity growth, not attention or dopamine.",
   ]
     .filter(Boolean)
