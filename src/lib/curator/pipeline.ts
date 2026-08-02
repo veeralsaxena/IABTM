@@ -105,6 +105,13 @@ async function fetchBehaviorSignals(userId: string, pathId: string) {
     .filter(Boolean)
     .slice(0, 8);
 
+  const chatPreferences = (checkIns ?? [])
+    .map((c) => c.body as string)
+    .filter((b) => /^chat preference:/i.test(b ?? ""))
+    .map((b) => b.replace(/^chat preference:\s*/i, "").trim())
+    .filter(Boolean)
+    .slice(0, 8);
+
   const liked = (reviews ?? []).filter(
     (r) => r.sentiment === "liked" || (r.rating ?? 0) >= 4,
   );
@@ -170,6 +177,7 @@ async function fetchBehaviorSignals(userId: string, pathId: string) {
     avoidIds: blockKeys,
     avoidedArtists,
     preferredArtists,
+    chatPreferences,
     lastActivityAt: lastTs ?? null,
     resonatedTopics:
       likedTitles.length > 0
@@ -335,6 +343,7 @@ export async function runCuratorPipeline(input: {
     avoidedArtists: behavior.avoidedArtists,
     preferredArtists: behavior.preferredArtists,
     skippedActivities: behavior.skippedActivities,
+    chatPreferences: behavior.chatPreferences,
   });
 
   const [plan, seenIds] = await Promise.all([
@@ -579,6 +588,7 @@ export async function discoverCategory(input: {
       skippedActivities: behavior.skippedActivities,
       resonatedTopics: behavior.resonatedTopics,
       rejectedTopics: behavior.rejectedTopics,
+      chatPreferences: behavior.chatPreferences,
     });
     stage = identity.stage;
     identityQuery = identity.query;

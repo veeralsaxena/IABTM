@@ -272,6 +272,7 @@ export default function LandingPage() {
           <div className="flex gap-4">
             <Link href="/architecture">System</Link>
             <Link href="/login">Sign in</Link>
+            <Link href="/login">Becoming Drop</Link>
           </div>
         </div>
       </footer>

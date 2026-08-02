@@ -174,10 +174,20 @@ function OnboardingInner() {
             </a>
           )}
           <span>
-            {step === "profile" && "1 / 4"}
-            {step === "attributes" && "2 / 4"}
-            {step === "questions" && "3 / 4"}
-            {step === "method" && "4 / 4"}
+            {isNewPath ? (
+              <>
+                {step === "attributes" && "1 / 3"}
+                {step === "questions" && "2 / 3"}
+                {step === "method" && "3 / 3"}
+              </>
+            ) : (
+              <>
+                {step === "profile" && "1 / 4"}
+                {step === "attributes" && "2 / 4"}
+                {step === "questions" && "3 / 4"}
+                {step === "method" && "4 / 4"}
+              </>
+            )}
           </span>
         </div>
       </header>
@@ -337,10 +347,14 @@ function OnboardingInner() {
             <div className="mt-8 flex flex-wrap items-center justify-between gap-3">
               <button
                 type="button"
-                onClick={() => setStep("profile")}
+                onClick={() => {
+                  if (isNewPath) router.push("/paths");
+                  else setStep("profile");
+                }}
                 className="inline-flex items-center gap-2 rounded-full border border-zinc-200 px-5 py-3 text-sm"
               >
-                <ChevronLeft className="h-4 w-4" /> Back
+                <ChevronLeft className="h-4 w-4" />{" "}
+                {isNewPath ? "Back to paths" : "Back"}
               </button>
               <div className="flex gap-2">
                 <button

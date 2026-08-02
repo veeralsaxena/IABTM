@@ -20,6 +20,8 @@ export async function buildIdentityQuery(input: {
   avoidedArtists?: string[];
   preferredArtists?: string[];
   skippedActivities?: string[];
+  /** Preference notes saved via Vector Companion chat */
+  chatPreferences?: string[];
 }): Promise<{
   query: string;
   embedding: number[];
@@ -83,6 +85,9 @@ export async function buildIdentityQuery(input: {
       : "",
     input.rejectedTopics?.length
       ? `User rejected: ${input.rejectedTopics.join(", ")}. Avoid similar clickbait or mismatched tone.`
+      : "",
+    input.chatPreferences?.length
+      ? `Companion chat preferences (human stated): ${input.chatPreferences.join("; ")}. Honor these soft constraints.`
       : "",
     "Optimize for human potential and identity growth, not attention or dopamine.",
   ]

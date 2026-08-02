@@ -45,7 +45,7 @@ export default function ArchitecturePage() {
 
         <SystemArchitectureCanvas />
 
-        <div className="mt-10 grid gap-4 md:grid-cols-3">
+        <div className="mt-10 grid gap-4 md:grid-cols-2">
           {[
             {
               t: "Why hybrid?",
@@ -57,7 +57,15 @@ export default function ArchitecturePage() {
             },
             {
               t: "Feedback that sticks",
-              d: "Hard: exact yt_/web_ ids filtered forever. Soft: disliked titles rewrite the next live identity query. UI removes the card immediately; soft text refreshes on the next curate.",
+              d: "Hard: exact yt_/web_ ids filtered forever. Soft: disliked titles + chat preferences rewrite the next live identity query. UI removes the card immediately; soft text refreshes on the next curate.",
+            },
+            {
+              t: "Becoming Drop",
+              d: "Identity commerce: real IABTM merch scored like media (identity/stage/tone). Plus a Path Journal gift — embossed Me→I Am + method prompts. FNP personalizes a name; we personalize the transformation.",
+            },
+            {
+              t: "Vector Companion",
+              d: "RAG chatbot: Gemini embeds the question, retrieves top personal memory chunks (path, briefing, reviews, preferences) by cosine, then Groq generates. Preference notes write back into the next identity query.",
             },
           ].map((c) => (
             <div

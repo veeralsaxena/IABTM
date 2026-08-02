@@ -387,6 +387,12 @@ export default function HomePage() {
           </div>
           <div className="flex flex-wrap gap-2">
             <Link
+              href="/shop"
+              className="rounded-full bg-zinc-900 px-3 py-1.5 text-xs font-medium text-white"
+            >
+              Becoming Drop
+            </Link>
+            <Link
               href="/artists"
               className="rounded-full border border-zinc-200 bg-white px-3 py-1.5 text-xs font-medium text-zinc-600 hover:border-zinc-400"
             >
@@ -400,6 +406,27 @@ export default function HomePage() {
             </Link>
           </div>
         </div>
+
+        <Link
+          href="/shop"
+          className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-zinc-900 bg-zinc-900 px-5 py-4 text-white transition hover:bg-zinc-800"
+        >
+          <div>
+            <div className="text-[11px] uppercase tracking-[0.14em] text-zinc-400">
+              Identity commerce
+            </div>
+            <div className="mt-0.5 font-display text-lg font-bold">
+              Open your Becoming Drop
+            </div>
+            <p className="mt-1 text-sm text-zinc-400">
+              IABTM merch scored to your path + a personalized Path Journal
+              gift edition.
+            </p>
+          </div>
+          <span className="rounded-full bg-white px-4 py-2 text-xs font-semibold text-zinc-900">
+            Shop drop
+          </span>
+        </Link>
 
         {/* Social compose — IABTM-style home */}
         <PostComposer

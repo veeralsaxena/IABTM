@@ -48,3 +48,40 @@ export async function groqText(
   });
   return completion.choices[0]?.message?.content?.trim() ?? "";
 }
+
+export type ChatMessage = {
+  role: "system" | "user" | "assistant";
+  content: string;
+};
+
+/** Multi-turn chat (non-stream) for companion / tools. */
+export async function groqChat(
+  messages: ChatMessage[],
+  opts?: { temperature?: number; model?: string },
+): Promise<string> {
+  const groq = getGroq();
+  const completion = await groq.chat.completions.create({
+    model: opts?.model ?? GROQ_MODEL,
+    temperature: opts?.temperature ?? 0.55,
+    messages,
+  });
+  return completion.choices[0]?.message?.content?.trim() ?? "";
+}
+
+/** Streaming chat — yields text deltas. */
+export async function* groqChatStream(
+  messages: ChatMessage[],
+  opts?: { temperature?: number; model?: string },
+): AsyncGenerator<string> {
+  const groq = getGroq();
+  const stream = await groq.chat.completions.create({
+    model: opts?.model ?? GROQ_MODEL,
+    temperature: opts?.temperature ?? 0.55,
+    messages,
+    stream: true,
+  });
+  for await (const chunk of stream) {
+    const delta = chunk.choices[0]?.delta?.content;
+    if (delta) yield delta;
+  }
+}

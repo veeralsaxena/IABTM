@@ -10,6 +10,16 @@ const nextConfig: NextConfig = {
         hostname: "qfxoidiathafjzlcndoe.supabase.co",
         pathname: "/storage/v1/object/public/**",
       },
+      {
+        protocol: "https",
+        hostname: "cdn.shopify.com",
+        pathname: "/**",
+      },
+      {
+        protocol: "https",
+        hostname: "iambetterthanme.com",
+        pathname: "/**",
+      },
     ],
   },
 };

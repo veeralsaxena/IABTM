@@ -22,6 +22,7 @@ import {
   PanelRightOpen,
   Route,
   Settings,
+  ShoppingBag,
   UserRound,
   Workflow,
 } from "lucide-react";
@@ -32,12 +33,14 @@ import {
   useShellCollapse,
   type AppNotification,
 } from "@/components/NotificationBell";
+import { VectorChat } from "@/components/VectorChat";
 
 export type { AppNotification };
 
 const nav = [
   { href: "/home", label: "Home", icon: Home },
   { href: "/media", label: "Curated media", icon: Film },
+  { href: "/shop", label: "Becoming Drop", icon: ShoppingBag },
   { href: "/artists", label: "Artists", icon: Palette },
   { href: "/paths", label: "Your paths", icon: Route },
   { href: "/settings", label: "Settings", icon: Settings },
@@ -416,6 +419,7 @@ export function DashboardShell({
           </div>
         </div>
       </div>
+      <VectorChat />
     </div>
   );
 }
