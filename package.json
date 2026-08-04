@@ -7,7 +7,10 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "seed": "tsx scripts/seed.ts"
+    "seed": "tsx scripts/seed.ts",
+    "slides": "npm run dev --prefix slides",
+    "slides:export": "npm run export --prefix slides",
+    "slides:pptx": "npx --prefix slides slidev export --format pptx"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.4",

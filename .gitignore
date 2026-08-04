@@ -1,5 +1,5 @@
 # dependencies
-/node_modules
+node_modules
 /.pnp
 .pnp.*
 .yarn/*
@@ -7,6 +7,10 @@
 !.yarn/plugins
 !.yarn/releases
 !.yarn/versions
+
+# slidev
+slides/dist
+slides/.slidev
 
 # testing
 /coverage

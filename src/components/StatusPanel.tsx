@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import {
   CheckCircle2,
   Flame,
@@ -9,14 +10,25 @@ import {
   Trees,
   Users,
 } from "lucide-react";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { cn } from "@/lib/utils";
+import { merchForActivity } from "@/lib/shop/contextual";
 
 type Activity = {
   id: string;
   title: string;
   description: string | null;
   category: string | null;
+};
+
+const OCCASION_LABEL: Record<string, string> = {
+  movement: "Movement wear",
+  outdoor: "Outdoor wear",
+  calm: "Calm wear",
+  discipline: "Focus wear",
+  statement: "Statement wear",
+  daily: "Daily wear",
+  creative: "Creative wear",
 };
 
 export function StatusPanel({
@@ -163,67 +175,111 @@ export function StatusPanel({
 
         <div className="mt-3 space-y-2">
           {activities.length ? (
-            activities.map((activity) => {
-              const isDone = done.has(activity.id);
-              const isSkipped = skipped.has(activity.id);
-              return (
-                <div
-                  key={activity.id}
-                  className={cn(
-                    "rounded-xl bg-white/5 p-3 transition",
-                    (isDone || isSkipped) && "opacity-60",
-                  )}
-                >
-                  <div className="text-[10px] uppercase tracking-wide text-zinc-400">
-                    {activity.category || "Practice"}
-                  </div>
-                  <div
-                    className={cn(
-                      "mt-1 text-sm font-medium leading-snug",
-                      (isDone || isSkipped) && "line-through",
-                    )}
-                  >
-                    {activity.title}
-                  </div>
-                  {activity.description && (
-                    <p className="mt-1 text-xs leading-relaxed text-zinc-400">
-                      {activity.description}
-                    </p>
-                  )}
-                  <div className="mt-2.5 flex gap-2">
-                    <button
-                      type="button"
-                      disabled={isDone || isSkipped || busyId === activity.id}
-                      onClick={() => mark(activity.id)}
-                      className={cn(
-                        "flex-1 rounded-full py-1.5 text-xs font-semibold",
-                        isDone
-                          ? "bg-white/10 text-zinc-300"
-                          : "bg-white text-zinc-900 hover:bg-zinc-100",
-                      )}
-                    >
-                      {isDone
-                        ? "Done ✓"
-                        : busyId === activity.id
-                          ? "…"
-                          : "Mark done"}
-                    </button>
-                    <button
-                      type="button"
-                      disabled={isDone || isSkipped || busyId === activity.id}
-                      onClick={() => skip(activity.id)}
-                      className="rounded-full border border-white/15 px-3 py-1.5 text-xs text-zinc-400 hover:text-white"
-                    >
-                      {isSkipped ? "Skipped" : "Skip"}
-                    </button>
-                  </div>
-                </div>
-              );
-            })
+            activities.map((activity) => (
+              <ActivityCard
+                key={activity.id}
+                activity={activity}
+                isDone={done.has(activity.id)}
+                isSkipped={skipped.has(activity.id)}
+                busy={busyId === activity.id}
+                onMark={() => mark(activity.id)}
+                onSkip={() => skip(activity.id)}
+              />
+            ))
           ) : (
             <p className="text-sm text-zinc-400">No activities yet — recurate.</p>
           )}
         </div>
+      </div>
+    </div>
+  );
+}
+
+function ActivityCard({
+  activity,
+  isDone,
+  isSkipped,
+  busy,
+  onMark,
+  onSkip,
+}: {
+  activity: Activity;
+  isDone: boolean;
+  isSkipped: boolean;
+  busy: boolean;
+  onMark: () => void;
+  onSkip: () => void;
+}) {
+  const merch = useMemo(
+    () =>
+      merchForActivity({
+        title: activity.title,
+        description: activity.description,
+        category: activity.category,
+      }),
+    [activity.title, activity.description, activity.category],
+  );
+
+  const occasion = merch.occasions[0] ?? "daily";
+  const label = OCCASION_LABEL[occasion] ?? "Path wear";
+  const focusId = merch.items[0]?.id;
+  const href = focusId
+    ? `/shop?occasion=${occasion}&focus=${focusId}`
+    : `/shop?occasion=${occasion}`;
+
+  return (
+    <div
+      className={cn(
+        "rounded-xl bg-white/5 p-3 transition",
+        (isDone || isSkipped) && "opacity-60",
+      )}
+    >
+      <div className="text-[10px] uppercase tracking-wide text-zinc-400">
+        {activity.category || "Practice"}
+      </div>
+      <div
+        className={cn(
+          "mt-1 text-sm font-medium leading-snug",
+          (isDone || isSkipped) && "line-through",
+        )}
+      >
+        {activity.title}
+      </div>
+      {activity.description && (
+        <p className="mt-1 text-xs leading-relaxed text-zinc-400">
+          {activity.description}
+        </p>
+      )}
+      <div className="mt-2.5 flex flex-wrap items-center gap-2">
+        <button
+          type="button"
+          disabled={isDone || isSkipped || busy}
+          onClick={onMark}
+          className={cn(
+            "flex-1 rounded-full py-1.5 text-xs font-semibold",
+            isDone
+              ? "bg-white/10 text-zinc-300"
+              : "bg-white text-zinc-900 hover:bg-zinc-100",
+          )}
+        >
+          {isDone ? "Done ✓" : busy ? "…" : "Mark done"}
+        </button>
+        <button
+          type="button"
+          disabled={isDone || isSkipped || busy}
+          onClick={onSkip}
+          className="rounded-full border border-white/15 px-3 py-1.5 text-xs text-zinc-400 hover:text-white"
+        >
+          {isSkipped ? "Skipped" : "Skip"}
+        </button>
+        {/* Subtle shop cue — no product ads in the activity flow */}
+        <Link
+          href={href}
+          className="rounded-full px-2.5 py-1.5 text-[11px] text-zinc-500 underline-offset-2 hover:text-zinc-300 hover:underline"
+          title={merch.reason}
+        >
+          {label} →
+        </Link>
       </div>
     </div>
   );

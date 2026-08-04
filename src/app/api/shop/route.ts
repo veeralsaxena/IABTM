@@ -1,3 +1,4 @@
+import { createClient as createSupabaseJs } from "@supabase/supabase-js";
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import {
@@ -5,14 +6,47 @@ import {
   buildPathDiary,
   scoreMerchForPath,
 } from "@/lib/shop/personalize";
+import { checkpointStatuses, nextCheckpoint } from "@/lib/shop/checkpoints";
+import {
+  buildDemandRadar,
+  type RadarPathRow,
+} from "@/lib/shop/demand-radar";
+import { AXIS_WHY, STYLE_AXES } from "@/lib/shop/styles";
+import { STYLE_RULES } from "@/lib/shop/style-profile";
 import type { PathRecord } from "@/types";
+
+async function fetchLivePathsForRadar(): Promise<RadarPathRow[]> {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (url && serviceKey) {
+    const admin = createSupabaseJs(url, serviceKey, {
+      auth: { persistSession: false, autoRefreshToken: false },
+    });
+    const { data } = await admin
+      .from("paths")
+      .select("me_labels, iam_labels, method, day_number, total_days")
+      .eq("status", "active")
+      .limit(200);
+    return (data as RadarPathRow[]) ?? [];
+  }
+
+  // Fallback: whatever the signed-in user can read (usually just their path)
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("paths")
+    .select("me_labels, iam_labels, method, day_number, total_days")
+    .eq("status", "active")
+    .limit(50);
+  return (data as RadarPathRow[]) ?? [];
+}
 
 /**
  * Becoming Drop API
- * - User style profile from Me/I Am/method/stage
- * - Rank IABTM catalog via style-vector fit (content-based)
- * - Custom Path Edition mockup (POD — not in catalog yet)
- * - Physical Path Diary spec (POD hardcover)
+ * - Deterministic style profile (5 axes, rule table)
+ * - Ranked IABTM catalog
+ * - Aspirational Path Edition + Path Diary
+ * - Checkpoint Drops (11/37/74/111)
+ * - Demand Radar for IABTM founders
  */
 export async function GET() {
   const supabase = await createClient();
@@ -63,6 +97,22 @@ export async function GET() {
   const custom = buildCustomPathEdition(input);
   const diary = buildPathDiary(input);
   const hero = ranked[0] ?? null;
+  const checkpoints = checkpointStatuses(input.day);
+  const next = nextCheckpoint(input.day);
+
+  const liveRows = await fetchLivePathsForRadar();
+  const radar = buildDemandRadar(liveRows);
+
+  // Ensure checkpoint SKUs appear in the drop list even if not top-8 style fit
+  const drop = ranked.slice(0, 8);
+  const seen = new Set(drop.map((d) => d.id));
+  for (const c of checkpoints) {
+    const item = ranked.find((r) => r.id === c.featuredProductId);
+    if (item && !seen.has(item.id)) {
+      drop.push(item);
+      seen.add(item.id);
+    }
+  }
 
   return NextResponse.json({
     ok: true,
@@ -76,28 +126,48 @@ export async function GET() {
       name,
     },
     styleProfile,
+    styleSystem: {
+      deterministic: true,
+      axes: STYLE_AXES.map((axis) => ({
+        axis,
+        why: AXIS_WHY[axis],
+        yourScore: styleProfile.vector[axis],
+      })),
+      rules: STYLE_RULES.map((r) => ({
+        id: r.id,
+        label: r.label,
+        why: r.why,
+      })),
+      formula: "final = 0.70×styleFit + 0.30×stageFit",
+      note: "Same Me/I Am/method/day → same vector (fingerprint). Product vectors are frozen in catalog.",
+    },
     howItWorks: {
       industry:
-        "Content-based filtering with an explicit style taxonomy (what Stitch Fix / catalog merchandising use for explainable recs). Embeddings help at huge scale for image/text search; neural graphs help with multi-hop relations. For identity→SKU with partner printing, structured style vectors + POD mockups are the practical holy grail.",
+        "Deterministic content-based filtering with a fixed 5-axis taxonomy. No LLM in scoring. Embeddings are for media/RAG; merch uses explainable attributes.",
       inputs: [
         "Me / I Am attributes",
         "Method + journey day → stage",
-        "Each product’s Style Profile (we labeled: energy, visibility, discipline, body, creativity)",
+        "Each product’s frozen Style Profile",
       ],
       process:
-        "Build user style vector from attributes → compare to each product vector (styleFit = 1 − average axis gap) → blend with stageFit → rank. Separately generate a Custom Path Edition design brief + Path Diary print spec for POD partners.",
+        "Rule table sets axes → round to 2 decimals → compare to product vectors → rank. Checkpoints unlock by day. Radar aggregates cohort styles for restock.",
       outputs: [
-        "Ranked existing IABTM SKUs with axis-level explanation",
-        "Custom Path Edition mockup (new design, not in shop yet)",
-        "Physical Path Diary ship list + interior prompts",
+        "Ranked IABTM catalog",
+        "Aspirational Path Edition",
+        "Physical Path Diary",
+        "Checkpoint Drops (11/37/74/111)",
+        "Demand Radar for IABTM",
       ],
       formula: "final = 0.70×styleFit + 0.30×stageFit",
     },
     custom,
     diary,
     journal: diary,
+    checkpoints,
+    nextCheckpoint: next,
+    radar,
     hero,
-    drop: ranked.slice(0, 8),
+    drop,
     catalogSize: ranked.length,
     storeUrl: "https://iambetterthanme.com/shop",
   });

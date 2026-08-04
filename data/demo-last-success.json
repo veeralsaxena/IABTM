@@ -1,42 +1,38 @@
 {
-  "savedAt": "2026-08-01T23:30:41.417Z",
+  "savedAt": "2026-08-02T06:22:41.978Z",
   "source": "live",
-  "latencyMs": 13830,
+  "latencyMs": 15868,
   "payload": {
     "ok": true,
     "model": "openai/gpt-oss-120b",
-    "latencyMs": 13830,
+    "latencyMs": 15868,
     "steps": {
       "inputs": {
         "me": [
+          "Out Of Shape",
+          "Self-conscious",
           "Scattered",
-          "Indecisive",
-          "Comparison-driven",
-          "Impulsive",
-          "Isolated"
+          "Indecisive"
         ],
         "iam": [
-          "Self-accepting",
-          "Courageous",
-          "Resilient",
-          "Consistent",
-          "Healthy"
+          "Action-oriented",
+          "Grounded"
         ],
         "answers": {
-          "vibe": "Motivated",
+          "vibe": "Tired but willing",
           "motivation": "Stories",
-          "interests": "Scientists"
+          "interests": "Entrepreneurs"
         },
         "learningStyles": [
           "Visual",
-          "Reading",
-          "Kinesthetic"
+          "Kinesthetic",
+          "Stories"
         ]
       },
       "methodGraph": {
         "selected": "Timeboxing",
         "blurb": "Protect attention in fixed blocks so starting becomes automatic.",
-        "rationale": "Timeboxing creates clear, repeatable slots that turn the chaotic start‑up phase into a habit, helping you move from scattered to consistent. By limiting each block, you curb impulsivity and comparison, letting self‑acceptance and resilience grow within a focused, healthy routine.",
+        "rationale": "Timeboxing gives you defined, short windows to act, cutting down overwhelm and making decisions automatic. Since you’re already action‑oriented and grounded, fixed blocks turn tired willingness into steady progress.",
         "ranked": [
           {
             "id": "Timeboxing",
@@ -58,53 +54,9 @@
               "Indecisive"
             ],
             "toHits": [
-              "Consistent"
+              "Action-oriented"
             ],
             "score": 6
-          },
-          {
-            "id": "Mindful Exposure",
-            "blurb": "Meet discomfort in small doses with awareness, not force.",
-            "from": [
-              "Anxious",
-              "Self-conscious",
-              "Avoidant",
-              "People-pleasing"
-            ],
-            "to": [
-              "Courageous",
-              "Confident",
-              "Self-accepting",
-              "Calm"
-            ],
-            "fromHits": [],
-            "toHits": [
-              "Self-accepting",
-              "Courageous"
-            ],
-            "score": 4
-          },
-          {
-            "id": "Creative Constraints",
-            "blurb": "Use limits to unblock making instead of waiting for perfect.",
-            "from": [
-              "Creatively Stuck",
-              "Perfectionist",
-              "Comparison-driven"
-            ],
-            "to": [
-              "Creative",
-              "Curious",
-              "Action-oriented",
-              "Self-accepting"
-            ],
-            "fromHits": [
-              "Comparison-driven"
-            ],
-            "toHits": [
-              "Self-accepting"
-            ],
-            "score": 4
           },
           {
             "id": "Body-First Reset",
@@ -121,49 +73,31 @@
               "Grounded",
               "Resilient"
             ],
-            "fromHits": [],
+            "fromHits": [
+              "Out Of Shape"
+            ],
             "toHits": [
-              "Resilient",
-              "Healthy"
+              "Grounded"
             ],
             "score": 4
           },
           {
-            "id": "Habit Stacking",
-            "blurb": "Attach tiny new behaviors to rituals you already keep.",
+            "id": "Mindful Exposure",
+            "blurb": "Meet discomfort in small doses with awareness, not force.",
             "from": [
-              "Inconsistent",
-              "Lazy",
-              "Avoidant"
-            ],
-            "to": [
-              "Consistent",
-              "Disciplined",
-              "Intentional"
-            ],
-            "fromHits": [],
-            "toHits": [
-              "Consistent"
-            ],
-            "score": 2
-          },
-          {
-            "id": "Social Accountability",
-            "blurb": "Grow with witnesses who reinforce the self you are becoming.",
-            "from": [
-              "Isolated",
-              "Disconnected",
-              "Inconsistent",
+              "Anxious",
+              "Self-conscious",
+              "Avoidant",
               "People-pleasing"
             ],
             "to": [
-              "Connected",
-              "Accountable",
-              "Generous",
-              "Confident"
+              "Courageous",
+              "Confident",
+              "Self-accepting",
+              "Calm"
             ],
             "fromHits": [
-              "Isolated"
+              "Self-conscious"
             ],
             "toHits": [],
             "score": 2
@@ -184,6 +118,64 @@
               "Grounded"
             ],
             "fromHits": [],
+            "toHits": [
+              "Grounded"
+            ],
+            "score": 2
+          },
+          {
+            "id": "Creative Constraints",
+            "blurb": "Use limits to unblock making instead of waiting for perfect.",
+            "from": [
+              "Creatively Stuck",
+              "Perfectionist",
+              "Comparison-driven"
+            ],
+            "to": [
+              "Creative",
+              "Curious",
+              "Action-oriented",
+              "Self-accepting"
+            ],
+            "fromHits": [],
+            "toHits": [
+              "Action-oriented"
+            ],
+            "score": 2
+          },
+          {
+            "id": "Habit Stacking",
+            "blurb": "Attach tiny new behaviors to rituals you already keep.",
+            "from": [
+              "Inconsistent",
+              "Lazy",
+              "Avoidant"
+            ],
+            "to": [
+              "Consistent",
+              "Disciplined",
+              "Intentional"
+            ],
+            "fromHits": [],
+            "toHits": [],
+            "score": 0
+          },
+          {
+            "id": "Social Accountability",
+            "blurb": "Grow with witnesses who reinforce the self you are becoming.",
+            "from": [
+              "Isolated",
+              "Disconnected",
+              "Inconsistent",
+              "People-pleasing"
+            ],
+            "to": [
+              "Connected",
+              "Accountable",
+              "Generous",
+              "Confident"
+            ],
+            "fromHits": [],
             "toHits": [],
             "score": 0
           }
@@ -201,168 +193,164 @@
           },
           {
             "from": "Timeboxing",
-            "to": "Consistent",
+            "to": "Action-oriented",
             "kind": "method→iam"
           },
           {
-            "from": "Mindful Exposure",
-            "to": "Self-accepting",
-            "kind": "method→iam"
-          },
-          {
-            "from": "Mindful Exposure",
-            "to": "Courageous",
-            "kind": "method→iam"
-          },
-          {
-            "from": "Comparison-driven",
-            "to": "Creative Constraints",
+            "from": "Out Of Shape",
+            "to": "Body-First Reset",
             "kind": "me→method"
+          },
+          {
+            "from": "Body-First Reset",
+            "to": "Grounded",
+            "kind": "method→iam"
+          },
+          {
+            "from": "Self-conscious",
+            "to": "Mindful Exposure",
+            "kind": "me→method"
+          },
+          {
+            "from": "Digital Boundaries",
+            "to": "Grounded",
+            "kind": "method→iam"
           },
           {
             "from": "Creative Constraints",
-            "to": "Self-accepting",
+            "to": "Action-oriented",
             "kind": "method→iam"
-          },
-          {
-            "from": "Body-First Reset",
-            "to": "Resilient",
-            "kind": "method→iam"
-          },
-          {
-            "from": "Body-First Reset",
-            "to": "Healthy",
-            "kind": "method→iam"
-          },
-          {
-            "from": "Habit Stacking",
-            "to": "Consistent",
-            "kind": "method→iam"
-          },
-          {
-            "from": "Isolated",
-            "to": "Social Accountability",
-            "kind": "me→method"
           }
         ]
       },
       "identityBlock": {
-        "whoIAmNow": "I feel scattered, indecisive, often compare myself to others, act impulsively, and spend time isolated.",
-        "whoIAmBecoming": "I am becoming self‑accepting, courageous, resilient, consistent, and healthy.",
-        "howIGetThere": "I use timeboxing to create clear, repeatable slots that turn chaotic starts into habits, limiting impulsivity and comparison while building focused, healthy routines.",
-        "rawText": "I feel scattered, indecisive, often compare myself to others, act impulsively, and spend time isolated. I am becoming self‑accepting, courageous, resilient, consistent, and healthy. I use timeboxing to create clear, repeatable slots that turn chaotic starts into habits, limiting impulsivity and comparison while building focused, healthy routines."
+        "whoIAmNow": "I feel out of shape, self‑conscious, scattered and indecisive. Still, I remain action‑oriented and grounded.",
+        "whoIAmBecoming": "I aim to become healthier, confident, focused and decisive, turning my willingness into steady progress.",
+        "howIGetThere": "I will use timeboxing, scheduling short, defined work and activity blocks each day to reduce overwhelm and automate decisions.",
+        "rawText": "I feel out of shape, self‑conscious, scattered and indecisive. Still, I remain action‑oriented and grounded. I aim to become healthier, confident, focused and decisive, turning my willingness into steady progress. I will use timeboxing, scheduling short, defined work and activity blocks each day to reduce overwhelm and automate decisions."
       },
       "identityQuery": {
-        "text": "Current self: Scattered, Indecisive, Comparison-driven, Impulsive, Isolated. Imagined self: Self-accepting, Courageous, Resilient, Consistent, Healthy. Method: Timeboxing. Journey day 1 of 111 (early). Need gentle activation, clarity, and low-friction first wins. Preferred learning styles: Visual, Reading, Kinesthetic. Optimize for human potential and identity growth, not attention or dopamine.",
+        "text": "Current self: Out Of Shape, Self-conscious, Scattered, Indecisive. Imagined self: Action-oriented, Grounded. Method: Timeboxing. Journey day 1 of 111 (early). Need gentle activation, clarity, and low-friction first wins. Preferred learning styles: Visual, Kinesthetic, Stories. Optimize for human potential and identity growth, not attention or dopamine.",
         "note": "Live ranking compares video embeddings to THIS query embedding (Me + I Am + method + stage + learning styles) — same Gemini 768-d space. The stored identity-block embedding is the durable fingerprint; the query embedding is today’s ranking target."
       },
       "embedding": {
         "dimensions": 768,
         "model": "gemini-embedding-001",
         "blockPreview": [
-          0.0113,
-          -0.0072,
-          -0.0129,
-          -0.0542,
-          -0.0056,
-          0.0086,
-          0.0045,
-          -0.0066,
-          0.004,
-          -0.0137,
-          -0.0051,
-          -0.0095,
-          -0.0104,
-          0.0458,
-          0.1322,
-          0.0016
+          -0.0146,
+          -0.0175,
+          0.0019,
+          -0.0658,
+          -0.0153,
+          0.0005,
+          0.0212,
+          -0.0154,
+          0.0178,
+          -0.0195,
+          -0.0082,
+          -0.0009,
+          -0.0006,
+          0.0388,
+          0.136,
+          -0.0116
         ],
         "queryPreview": [
-          -0.0056,
-          -0.0308,
-          -0.0123,
-          -0.0731,
-          -0.0036,
-          0.0122,
-          0.0008,
-          -0.0227,
-          0.0008,
-          -0.002,
-          -0.0107,
-          0.0092,
-          -0.0102,
-          0.0346,
-          0.136,
-          -0.0162
+          -0.016,
+          -0.0347,
+          0.002,
+          -0.0822,
+          -0.0032,
+          0.0081,
+          0.0036,
+          -0.0193,
+          0.0057,
+          -0.0034,
+          -0.0117,
+          0.0116,
+          -0.0133,
+          0.0324,
+          0.1322,
+          -0.0141
         ],
-        "blockNorm": 0.5956,
-        "queryNorm": 0.5934
+        "blockNorm": 0.5954,
+        "queryNorm": 0.5937
       },
       "discovery": {
         "queries": [
-          "timeboxing for personal growth gentle tutorial",
-          "how to use timeboxing to build self‑acceptance and resilience"
+          "beginner timeboxing workout routine visual guide",
+          "gentle daily movement habit using timeboxing for beginners"
         ],
         "plannedAll": {
           "film": [
-            "Timeboxing productivity documentary YouTube",
-            "How to use timeboxing for personal growth video"
+            "YouTube documentary on timeboxing for personal productivity",
+            "Short film visual guide to building daily exercise habit"
           ],
           "music": [
-            "Focus music playlist for timeboxing sessions",
-            "Instrumental music for concentration and resilience"
+            "Instrumental focus music playlist for timeboxed work sessions",
+            "Upbeat beginner workout music mix for 15-minute routines"
           ],
           "art": [
-            "Artists using timeboxing to complete projects interview",
-            "Timeboxing techniques for visual art creation tutorial"
+            "Infographic on timeboxing technique for decision making",
+            "Visual art series on overcoming indecision and building confidence"
           ],
           "animation": [
-            "Animated explanation of timeboxing method",
-            "Short animation on building habits with timeboxing"
+            "Animated explainer video of timeboxing method for beginners",
+            "Animation about small daily actions leading to confidence"
           ],
           "editorial": [
-            "Editorial on timeboxing for overcoming indecision",
-            "Article about timeboxing and building resilience in daily life"
+            "Editorial article on using timeboxing to improve focus and reduce scattered thinking",
+            "Feature on beginner fitness routines with timeboxing structure"
           ],
           "print": [
-            "Timeboxing productivity book PDF download",
-            "Guide to timeboxing for beginners printable"
+            "PDF guide to timeboxing for personal growth and habit formation",
+            "Printable daily habit tracker for movement and decision making"
           ],
           "people": [
             "Cal Newport timeboxing productivity",
-            "Laura Vanderkam timeboxing and time management"
+            "James Clear habit formation confidence"
           ],
           "podcast": [
-            "Timeboxing productivity podcast episode",
-            "Habit formation and timeboxing interview podcast"
+            "Podcast episode on timeboxing for beginners and action-oriented mindset",
+            "Podcast about building confidence through small daily actions"
           ]
         },
         "activities": [
           {
-            "title": "Morning Timebox Walk",
-            "description": "Set a 30‑minute timer, choose a simple intention (e.g., breathe, observe surroundings), and walk outdoors while staying within the timebox to build courage and consistency.",
+            "title": "Morning Walk & Day Planner",
+            "description": "Take a 15‑minute brisk walk outdoors while using a simple notebook to timebox your tasks for the day in 30‑minute blocks.",
             "category": "outdoor"
           },
           {
-            "title": "Park Sketching Timebox",
-            "description": "Bring a sketchpad to a nearby park, set a 45‑minute timer, and create a visual piece focusing on one theme, reinforcing focus and resilience through kinesthetic art making.",
+            "title": "Park Decision Sprint",
+            "description": "At a local park, set a timer for 5 minutes and list three choices you need to make, then pick the best option before the timer ends.",
             "category": "movement"
           },
           {
-            "title": "Visual Timebox Board Creation",
-            "description": "Use sticky notes or a whiteboard to map out the day’s tasks into colored timeblocks, then follow the schedule, supporting visual learners and reducing indecision.",
+            "title": "Bodyweight HIIT Circuit",
+            "description": "Perform a 20‑minute indoor bodyweight HIIT routine, breaking the session into four 5‑minute timeboxed intervals with 30‑second rests.",
             "category": "indoor"
           },
           {
-            "title": "Focused Reading Sprint",
-            "description": "Choose a personal‑development article or chapter, set a 40‑minute timer, read without distraction, then note one actionable insight to reinforce self‑acceptance.",
-            "category": "indoor"
+            "title": "Visual Timebox Board Creation",
+            "description": "Spend 30 minutes drawing a visual board that maps out your weekly goals using colored blocks to represent timeboxed periods.",
+            "category": "reflection"
           }
         ],
-        "candidatesFound": 23,
+        "candidatesFound": 27,
         "shortlistSize": 8,
         "shortlistNote": "We do not embed every search hit (cost/latency). First N candidates (here up to 8 in demo, 12 in production) get Gemini embeddings for cosine vs the live identity-query vector. Everyone still goes through the hybrid reranker with lexical/rules.",
         "candidates": [
+          {
+            "id": "yt_71j4tViqsoY",
+            "title": "Timeboxing will improve how you work — immediately and measurably",
+            "description": "In this video, I show you exactly how timeboxing works using Super Productivity as a practical example. You'll see how to plan ...",
+            "creator": "Super Productivity",
+            "url": "https://www.youtube.com/watch?v=71j4tViqsoY",
+            "media_type": "film",
+            "duration_minutes": 4,
+            "cosine": 0.791,
+            "shortlisted": true
+          },
           {
             "id": "yt_GBXpSr1TXgk",
             "title": "Timeboxing: Harvard's Most Effective Productivity Method",
@@ -371,18 +359,7 @@
             "url": "https://www.youtube.com/watch?v=GBXpSr1TXgk",
             "media_type": "film",
             "duration_minutes": 1,
-            "cosine": 0.8,
-            "shortlisted": true
-          },
-          {
-            "id": "yt_T4dser6ssp0",
-            "title": "Maximize Productivity With These Time Management Tools | Dr. Cal Newport & Dr. Andrew Huberman",
-            "description": "Dr. Cal Newport and Dr. Andrew Huberman discuss the concept of time blocking, fixed schedule productivity and deep work.",
-            "creator": "Huberman Lab Clips",
-            "url": "https://www.youtube.com/watch?v=T4dser6ssp0",
-            "media_type": "film",
-            "duration_minutes": 9,
-            "cosine": 0.779,
+            "cosine": 0.797,
             "shortlisted": true
           },
           {
@@ -393,7 +370,7 @@
             "url": "https://www.youtube.com/watch?v=JjR_Fdz0dx0",
             "media_type": "film",
             "duration_minutes": 3,
-            "cosine": 0.792,
+            "cosine": 0.79,
             "shortlisted": true
           },
           {
@@ -404,29 +381,29 @@
             "url": "https://www.youtube.com/watch?v=fbAYK4KQrso",
             "media_type": "film",
             "duration_minutes": 11,
-            "cosine": 0.787,
+            "cosine": 0.788,
             "shortlisted": true
           },
           {
-            "id": "yt_x9K80nyTltU",
-            "title": "How To Do Time Blocking The Right Way.",
-            "description": "\"Timeboxing\" was a thing until it wasn't. Yet, underneath this method, there is something that does work, and in this video, ...",
-            "creator": "Carl Pullein",
-            "url": "https://www.youtube.com/watch?v=x9K80nyTltU",
+            "id": "yt_T4dser6ssp0",
+            "title": "Maximize Productivity With These Time Management Tools | Dr. Cal Newport & Dr. Andrew Huberman",
+            "description": "Dr. Cal Newport and Dr. Andrew Huberman discuss the concept of time blocking, fixed schedule productivity and deep work.",
+            "creator": "Huberman Lab Clips",
+            "url": "https://www.youtube.com/watch?v=T4dser6ssp0",
             "media_type": "film",
-            "duration_minutes": 10,
-            "cosine": 0.784,
+            "duration_minutes": 9,
+            "cosine": 0.778,
             "shortlisted": true
           },
           {
-            "id": "yt_71j4tViqsoY",
-            "title": "Timeboxing will improve how you work — immediately and measurably",
-            "description": "In this video, I show you exactly how timeboxing works using Super Productivity as a practical example. You'll see how to plan ...",
-            "creator": "Super Productivity",
-            "url": "https://www.youtube.com/watch?v=71j4tViqsoY",
+            "id": "yt_4y3fcfbR2tE",
+            "title": "TIME BOXING 101: Manage Tasks & Life like a PRO",
+            "description": "Are you tired of juggling endless tasks and feeling overwhelmed by your schedule? In this video, I'll share the ONLY productivity ...",
+            "creator": "Shashank Shekhar (shashank.one)",
+            "url": "https://www.youtube.com/watch?v=4y3fcfbR2tE",
             "media_type": "film",
-            "duration_minutes": 4,
-            "cosine": 0.795,
+            "duration_minutes": 6,
+            "cosine": 0.8,
             "shortlisted": true
           },
           {
@@ -441,35 +418,35 @@
             "shortlisted": true
           },
           {
-            "id": "yt_0ENLTTixP1I",
-            "title": "Time-Boxing in Scrum Explained | 5 Game-Changing Benefits for Agile Teams",
-            "description": "Are your Scrum meetings dragging on with little outcome? Time-boxing might be the missing key! In this video, Devendra breaks ...",
-            "creator": "SkillStack With Devendra",
-            "url": "https://www.youtube.com/watch?v=0ENLTTixP1I",
+            "id": "yt_rR4i8oMArjg",
+            "title": "How the Timeboxing Method Can Supercharge Your Productivity | VPTV Episode 23",
+            "description": "Hi, I'm Holly Copsey, and welcome to episode 23 of VPTV! What is timeboxing? And how can you use timeboxing to supercharge ...",
+            "creator": "Virtually Priceless",
+            "url": "https://www.youtube.com/watch?v=rR4i8oMArjg",
             "media_type": "film",
-            "duration_minutes": 4,
-            "cosine": 0.766,
+            "duration_minutes": 8,
+            "cosine": 0.761,
             "shortlisted": true
           },
           {
-            "id": "yt_ROIWG7VNU-8",
-            "title": "Be 91% More Effective The Timeboxing Method",
-            "description": "Your to-do list is a graveyard of unfinished intentions and empty wishes. In this deep dive, we expose why traditional scheduling ...",
-            "creator": "Ascent Academy",
-            "url": "https://www.youtube.com/watch?v=ROIWG7VNU-8",
+            "id": "yt__HEnohs6yYw",
+            "title": "THE CHOICE (Short Animated Movie)",
+            "description": "This is a short animated film, about how your small everyday life choices can ultimately shape your life. Proud Patreon Supporter ...",
+            "creator": "Project Better Self",
+            "url": "https://www.youtube.com/watch?v=_HEnohs6yYw",
             "media_type": "film",
-            "duration_minutes": 4,
+            "duration_minutes": 3,
             "cosine": null,
             "shortlisted": false
           },
           {
-            "id": "yt_yXIRSJuT0aA",
-            "title": "What Is Timeboxing And How Does It Work? - High School Toolkit",
-            "description": "What Is Timeboxing And How Does It Work? Feeling overwhelmed by schoolwork is something many high school students ...",
-            "creator": "High School Toolkit",
-            "url": "https://www.youtube.com/watch?v=yXIRSJuT0aA",
+            "id": "yt__CApmjQcxx0",
+            "title": "how to build discipline | \"just one step\" short film",
+            "description": "All it takes to start working towards that big goal you have is one step, after a while you will be there. Fall in love with the process ...",
+            "creator": "for my brothers",
+            "url": "https://www.youtube.com/watch?v=_CApmjQcxx0",
             "media_type": "film",
-            "duration_minutes": 3,
+            "duration_minutes": 2,
             "cosine": null,
             "shortlisted": false
           }
@@ -478,42 +455,25 @@
       "agentLoop": {
         "kind": "critic_research",
         "note": "This is the real agentic hop: Observe pass-1 titles → Reason (Groq Critic) → Decide accept|retry → Act (re-search once). Ranking stays math. Fail-open if critic errors.",
-        "observed": "Most results emphasize corporate or celebrity time‑boxing tricks (Harvard, Elon Musk, productivity tools) rather than calm, personal‑growth tutorials that help a scattered, indecisive self become more self‑accepting and resilient.",
+        "observed": "All candidates are about generic timeboxing productivity (e.g., Harvard, Elon Musk, Dr. Cal Newport) and lack fitness, beginner‑friendly, or narrative elements that match the user's self‑improvement context.",
         "decision": "retry",
-        "reason": "The candidate titles are mostly high‑energy productivity hype and lack gentle, identity‑focused guidance that matches the user's early‑stage, low‑friction needs.",
+        "reason": "The sample titles focus on high‑level productivity and business use‑cases, not the gentle, visual, story‑driven guidance needed for a beginner seeking to activate a healthier, grounded self.",
         "heuristicsTriggered": [],
         "pass1Queries": [
-          "Timeboxing productivity documentary YouTube",
-          "How to use timeboxing for personal growth video"
+          "YouTube documentary on timeboxing for personal productivity",
+          "Short film visual guide to building daily exercise habit"
         ],
         "revisedQueries": [
-          "timeboxing for personal growth gentle tutorial",
-          "how to use timeboxing to build self‑acceptance and resilience"
+          "beginner timeboxing workout routine visual guide",
+          "gentle daily movement habit using timeboxing for beginners"
         ],
-        "pass1Candidates": 14,
-        "pass2Added": 9,
-        "mergedCandidates": 23
+        "pass1Candidates": 15,
+        "pass2Added": 12,
+        "mergedCandidates": 27
       },
       "ranking": {
         "note": "Hybrid reranker: cosine(identity-query, video text) when available + lexical attribute/method fit + duration + anti-clickbait. LLM does not pick the winner.",
         "top": [
-          {
-            "id": "yt_GBXpSr1TXgk",
-            "title": "Timeboxing: Harvard's Most Effective Productivity Method",
-            "description": "Get the Timebox PDF and Notion-App: https://edriansnotes.gumroad.com/l/timebox-planner?layout=profile All of my Templates: ...",
-            "creator": "EdriansNotes",
-            "url": "https://www.youtube.com/watch?v=GBXpSr1TXgk",
-            "media_type": "film",
-            "scores": {
-              "identityFit": 0.638,
-              "stageFit": 1,
-              "potential": 0.653,
-              "novelty": 1,
-              "antiAttention": 0.9,
-              "final": 0.72
-            },
-            "cosineRaw": 0.6009
-          },
           {
             "id": "yt_JjR_Fdz0dx0",
             "title": "Why Timeboxing Works and How To Get Started in 2023",
@@ -522,14 +482,31 @@
             "url": "https://www.youtube.com/watch?v=JjR_Fdz0dx0",
             "media_type": "film",
             "scores": {
-              "identityFit": 0.632,
+              "identityFit": 0.63,
+              "stageFit": 1,
+              "potential": 0.65,
+              "novelty": 1,
+              "antiAttention": 0.9,
+              "final": 0.719
+            },
+            "cosineRaw": 0.5802
+          },
+          {
+            "id": "yt_GBXpSr1TXgk",
+            "title": "Timeboxing: Harvard's Most Effective Productivity Method",
+            "description": "Get the Timebox PDF and Notion-App: https://edriansnotes.gumroad.com/l/timebox-planner?layout=profile All of my Templates: ...",
+            "creator": "EdriansNotes",
+            "url": "https://www.youtube.com/watch?v=GBXpSr1TXgk",
+            "media_type": "film",
+            "scores": {
+              "identityFit": 0.635,
               "stageFit": 1,
               "potential": 0.651,
               "novelty": 1,
               "antiAttention": 0.9,
-              "final": 0.72
+              "final": 0.719
             },
-            "cosineRaw": 0.5841
+            "cosineRaw": 0.5935
           },
           {
             "id": "yt_71j4tViqsoY",
@@ -539,14 +516,14 @@
             "url": "https://www.youtube.com/watch?v=71j4tViqsoY",
             "media_type": "film",
             "scores": {
-              "identityFit": 0.634,
+              "identityFit": 0.631,
               "stageFit": 1,
-              "potential": 0.65,
+              "potential": 0.648,
               "novelty": 1,
               "antiAttention": 0.9,
-              "final": 0.719
+              "final": 0.717
             },
-            "cosineRaw": 0.5904
+            "cosineRaw": 0.5825
           },
           {
             "id": "yt_fbAYK4KQrso",
@@ -558,12 +535,12 @@
             "scores": {
               "identityFit": 0.628,
               "stageFit": 1,
-              "potential": 0.647,
+              "potential": 0.648,
               "novelty": 1,
               "antiAttention": 0.9,
               "final": 0.717
             },
-            "cosineRaw": 0.5748
+            "cosineRaw": 0.5753
           },
           {
             "id": "yt_ge6vhV732fc",
@@ -580,11 +557,11 @@
               "antiAttention": 0.9,
               "final": 0.716
             },
-            "cosineRaw": 0.5884
+            "cosineRaw": 0.5881
           }
         ],
-        "whyNow": "The timeboxing planner provides the concrete structure needed to channel scattered and impulsive tendencies into focused, consistent action, aligning with the user's emerging self‑acceptance and resilience. Its high novelty and low‑distraction design make it especially effective at this stage of personal growth, supporting steady progress toward healthier habits.",
-        "primaryWhy": "The timeboxing planner provides the concrete structure needed to channel scattered and impulsive tendencies into focused, consistent action, aligning with the user's emerging self‑acceptance and resilience. Its high novelty and low‑distraction design make it especially effective at this stage of personal growth, supporting steady progress toward healthier habits."
+        "whyNow": "The article’s focus on timeboxing delivers a concrete, high‑impact framework that directly tackles distraction, indecision, and scattered habits, aligning perfectly with the user’s shift toward an action‑oriented, grounded identity. Its strong stage fit, novelty, and anti‑attention design make it especially timely for accelerating that growth trajectory now.",
+        "primaryWhy": "The article’s focus on timeboxing delivers a concrete, high‑impact framework that directly tackles distraction, indecision, and scattered habits, aligning perfectly with the user’s shift toward an action‑oriented, grounded identity. Its strong stage fit, novelty, and anti‑attention design make it especially timely for accelerating that growth trajectory now."
       },
       "orchestration": {
         "note": "Orchestrated pipeline + one bounded agentic loop (Critic). Method matcher & reranker stay deterministic — not agents.",
@@ -704,9 +681,9 @@
           }
         ],
         "simulatedAfterDislike": {
-          "dislikedTitle": "Timeboxing: Harvard's Most Effective Productivity Method",
-          "nextIdentityQuerySnippet": "Current self: Scattered, Indecisive, Comparison-driven, Impulsive, Isolated. Imagined self: Self-accepting, Courageous, Resilient, Consistent, Healthy. Method: Timeboxing. Journey day 1 of 111 (early). Need gentle activation, clarity, and low-friction first wins. Preferred learning styles: Visual, Reading, Kinesthetic. Optimize for human potential and identity growth, not attention or dopamine. User rated low / disliked — DO NOT recommend similar: Timeboxing: Harvard's Most Effective Productivity Method. Why they disliked: Rated 1/5 — didn’t land.",
-          "avoidId": "yt_GBXpSr1TXgk"
+          "dislikedTitle": "Why Timeboxing Works and How To Get Started in 2023",
+          "nextIdentityQuerySnippet": "Current self: Out Of Shape, Self-conscious, Scattered, Indecisive. Imagined self: Action-oriented, Grounded. Method: Timeboxing. Journey day 1 of 111 (early). Need gentle activation, clarity, and low-friction first wins. Preferred learning styles: Visual, Kinesthetic, Stories. Optimize for human potential and identity growth, not attention or dopamine. User rated low / disliked — DO NOT recommend similar: Why Timeboxing Works and How To Get Started in 2023. Why they disliked: Rated 1/5 — didn’t land.",
+          "avoidId": "yt_JjR_Fdz0dx0"
         }
       }
     }

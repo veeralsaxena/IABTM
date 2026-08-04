@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import {
@@ -8,8 +8,11 @@ import {
   BookMarked,
   ChevronDown,
   ExternalLink,
+  Lock,
+  Radar,
   Shirt,
   Sparkles,
+  Unlock,
 } from "lucide-react";
 import { DashboardShell } from "@/components/DashboardShell";
 import {
@@ -19,8 +22,35 @@ import {
   type GarmentKind,
 } from "@/components/shop/GarmentMockup";
 import { DiaryPreview } from "@/components/shop/DiaryPreview";
+import { HoverExplain } from "@/components/HoverExplain";
 import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
+import {
+  PRODUCT_OCCASIONS,
+  type MerchOccasion,
+} from "@/lib/shop/contextual";
+
+const AXIS_HOVER: Record<string, string> = {
+  energy:
+    "0 = calm apparel, 1 = intense. Set by keyword rules on Me/I Am/method (e.g. procrast → set 0.30), then early-stage clamp may lower it further. Product value is hand-labeled in catalog.ts.",
+  visibility:
+    "0 = subtle script, 1 = loud statement. Rules can set/min/max; early stage clamps ≤0.45 so Day-1 users don’t get magazine tees first.",
+  discipline:
+    "0 = soft daily, 1 = structured. Timeboxing / focus / action words raise this (set or min). BW Crew scores high here.",
+  body:
+    "0 = reflective lounge, 1 = athletic/movement. Health, fit, body-reset method bump this. Sleeveless hoodie scores high.",
+  creativity:
+    "0 = classic, 1 = expressive color/art. Creative / art / imagine words raise this. Pink acid / magazine prints score high.",
+};
+
+const MERCH_SCORE_HOVER = {
+  Style:
+    "styleFit = 1 − mean(|yourAxis − productAxis|) across the 5 axes. Closer vectors → higher score. No embeddings.",
+  Stage:
+    "stageFit = how well this product’s visibility matches your journey stage (early prefers quieter; late prefers louder).",
+  Final:
+    "final = 0.70×styleFit + 0.30×stageFit. This is what sorts the ranked catalog.",
+} as const;
 
 type StyleVector = Record<string, number>;
 
@@ -60,6 +90,12 @@ type CustomEdition = {
   backLine: string;
   sleeveHint: string;
   edition: string;
+  quoteOptions: Array<{
+    id: string;
+    frontLine: string;
+    backLine: string;
+    vibe: string;
+  }>;
   why: string;
   partnerNote: string;
 };
@@ -96,6 +132,14 @@ type ShopPayload = {
     labels: string[];
     stage: string;
     rationale: string[];
+    deterministic?: boolean;
+    fingerprint?: string;
+  };
+  styleSystem?: {
+    deterministic: boolean;
+    axes: Array<{ axis: string; why: string; yourScore: number }>;
+    formula: string;
+    note: string;
   };
   howItWorks: {
     industry: string;
@@ -106,6 +150,49 @@ type ShopPayload = {
   };
   custom: CustomEdition;
   diary: Diary;
+  checkpoints?: Array<{
+    id: string;
+    day: number;
+    title: string;
+    subtitle: string;
+    unlocked: boolean;
+    daysRemaining: number;
+    priceHint: number;
+    unlockCopy: string;
+    lockedCopy: string;
+    bundle: string;
+    product: {
+      id: string;
+      title: string;
+      image: string;
+      price: number;
+      shopUrl: string;
+    } | null;
+  }>;
+  nextCheckpoint?: {
+    id: string;
+    day: number;
+    title: string;
+    daysRemaining: number;
+    unlocked: boolean;
+  } | null;
+  radar?: {
+    source: string;
+    sampleSize: number;
+    livePaths: number;
+    demoPaths: number;
+    topIAm: Array<{ label: string; count: number }>;
+    topMethods: Array<{ label: string; count: number }>;
+    stageMix: { early: number; middle: number; late: number };
+    meanStyle: StyleVector;
+    restock: {
+      occasion: string;
+      productId: string;
+      title: string;
+      why: string;
+    };
+    founderBlurb: string;
+  };
   hero: DropItem | null;
   drop: DropItem[];
   storeUrl: string;
@@ -120,21 +207,21 @@ const VIEWS: Array<{
   Icon: typeof Shirt;
 }> = [
   {
-    id: "custom",
-    label: "Custom Path Edition",
-    hint: "New design from your path · partner prints it",
-    Icon: Sparkles,
-  },
-  {
     id: "catalog",
     label: "Ranked IABTM shop",
-    hint: "Existing pieces scored to your style",
+    hint: "Existing pieces — why this fits your path",
     Icon: Shirt,
+  },
+  {
+    id: "custom",
+    label: "Aspirational Path Edition",
+    hint: "I Am quotes only · never Me friction on apparel",
+    Icon: Sparkles,
   },
   {
     id: "diary",
     label: "Physical Path Diary",
-    hint: "Hardcover that ships to your home",
+    hint: "Private hardcover · Me→I Am stays here",
     Icon: BookMarked,
   },
 ];
@@ -146,15 +233,36 @@ export default function ShopPage() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState<DropItem | null>(null);
-  const [view, setView] = useState<ViewId>("custom");
+  const [view, setView] = useState<ViewId>("catalog");
   const [menuOpen, setMenuOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const [occasionFilter, setOccasionFilter] = useState<MerchOccasion | null>(
+    null,
+  );
 
-  // Live customization (before partner print)
+  // Live customization — garment + curated quote (not free Me→I Am text)
   const [garment, setGarment] = useState<GarmentKind>("tee");
   const [color, setColor] = useState<GarmentColor>("bone");
-  const [frontLine, setFrontLine] = useState("");
-  const [backLine, setBackLine] = useState("");
+  const [quoteId, setQuoteId] = useState("iam-mark");
   const [side, setSide] = useState<"front" | "back">("front");
+  const [showRadar, setShowRadar] = useState(true);
+  const [showAxes, setShowAxes] = useState(false);
+
+  useEffect(() => {
+    if (!menuOpen) return;
+    const onPointer = (e: MouseEvent) => {
+      if (!menuRef.current?.contains(e.target as Node)) setMenuOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setMenuOpen(false);
+    };
+    document.addEventListener("mousedown", onPointer);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onPointer);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [menuOpen]);
 
   useEffect(() => {
     (async () => {
@@ -185,17 +293,56 @@ export default function ShopPage() {
         setError(json.error || "Could not load your Becoming Drop");
         return;
       }
-      setData(json);
-      setSelected(json.hero);
+
+      const params = new URLSearchParams(window.location.search);
+      const focusId = params.get("focus");
+      const occasion = params.get("occasion") as MerchOccasion | null;
+      const validOccasion =
+        occasion &&
+        [
+          "movement",
+          "outdoor",
+          "calm",
+          "discipline",
+          "statement",
+          "daily",
+          "creative",
+        ].includes(occasion)
+          ? occasion
+          : null;
+
+      let drop: DropItem[] = json.drop ?? [];
+      if (validOccasion) {
+        drop = [...drop].sort((a, b) => {
+          const ao = PRODUCT_OCCASIONS[a.id]?.includes(validOccasion) ? 1 : 0;
+          const bo = PRODUCT_OCCASIONS[b.id]?.includes(validOccasion) ? 1 : 0;
+          return bo - ao;
+        });
+        setOccasionFilter(validOccasion);
+        setView("catalog");
+      }
+
+      setData({ ...json, drop });
+      const focused = focusId
+        ? drop.find((d) => d.id === focusId) ??
+          json.drop?.find((d: DropItem) => d.id === focusId)
+        : null;
+      setSelected(focused ?? drop[0] ?? json.hero);
+      if (focused || validOccasion) setView("catalog");
       setGarment(json.custom.garment);
       setColor(json.custom.color);
-      setFrontLine(json.custom.frontLine);
-      setBackLine(json.custom.backLine);
+      setQuoteId(json.custom.quoteOptions?.[0]?.id ?? "iam-mark");
     })();
   }, []);
 
   const active = selected ?? data?.hero ?? null;
   const currentView = VIEWS.find((v) => v.id === view)!;
+  const selectedQuote =
+    data?.custom.quoteOptions.find((q) => q.id === quoteId) ??
+    data?.custom.quoteOptions[0] ??
+    null;
+  const frontLine = selectedQuote?.frontLine ?? data?.custom.frontLine ?? "";
+  const backLine = selectedQuote?.backLine ?? data?.custom.backLine ?? "";
   const price =
     view === "custom"
       ? data?.custom.price
@@ -206,8 +353,8 @@ export default function ShopPage() {
   return (
     <DashboardShell name={name} avatarUrl={avatarUrl} title="Becoming Drop">
       <div className="mx-auto max-w-5xl space-y-6">
-        {/* Single hero — one composition */}
-        <section className="overflow-hidden rounded-[28px] border border-zinc-200 bg-[#f7f4ef]">
+        {/* Hero — no overflow-hidden (was clipping the dropdown) */}
+        <section className="rounded-[28px] border border-zinc-200 bg-[#f7f4ef]">
           <div className="p-6 sm:p-8">
             <div className="text-[11px] uppercase tracking-[0.16em] text-zinc-500">
               Becoming Drop · one path, three buyable outputs
@@ -216,11 +363,11 @@ export default function ShopPage() {
               Merch from your identity — not a generic shop.
             </h1>
             <p className="mt-3 max-w-2xl text-sm leading-relaxed text-zinc-600">
-              Same Me → I Am path powers everything below. Pick what you want to
-              see; you never leave this page.
+              We sell real IABTM pieces ranked to your path — and surface them
+              next to your activities (walk → movement gear). Path Edition prints
+              only aspirational I Am energy — never “I used to procrastinate.”
             </p>
 
-            {/* Step flow — production logic, plain English */}
             {data && (
               <ol className="mt-6 grid gap-2 sm:grid-cols-4">
                 {[
@@ -264,60 +411,66 @@ export default function ShopPage() {
                 ))}
               </ol>
             )}
-
-            {/* Dropdown — stays on one page */}
-            <div className="relative mt-6 max-w-md">
-              <label className="text-[10px] uppercase tracking-[0.14em] text-zinc-400">
-                Showing
-              </label>
-              <button
-                type="button"
-                onClick={() => setMenuOpen((o) => !o)}
-                className="mt-1 flex w-full items-center justify-between gap-3 rounded-2xl border border-zinc-300 bg-white px-4 py-3 text-left shadow-sm"
-              >
-                <div className="flex items-center gap-3">
-                  <currentView.Icon className="h-4 w-4 text-zinc-500" />
-                  <div>
-                    <div className="text-sm font-semibold text-zinc-900">
-                      {currentView.label}
-                    </div>
-                    <div className="text-xs text-zinc-500">{currentView.hint}</div>
-                  </div>
-                </div>
-                <ChevronDown
-                  className={cn(
-                    "h-4 w-4 text-zinc-400 transition",
-                    menuOpen && "rotate-180",
-                  )}
-                />
-              </button>
-              {menuOpen && (
-                <div className="absolute z-20 mt-2 w-full overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-lg">
-                  {VIEWS.map((v) => (
-                    <button
-                      key={v.id}
-                      type="button"
-                      onClick={() => {
-                        setView(v.id);
-                        setMenuOpen(false);
-                      }}
-                      className={cn(
-                        "flex w-full items-start gap-3 px-4 py-3 text-left hover:bg-zinc-50",
-                        view === v.id && "bg-zinc-50",
-                      )}
-                    >
-                      <v.Icon className="mt-0.5 h-4 w-4 text-zinc-500" />
-                      <div>
-                        <div className="text-sm font-semibold">{v.label}</div>
-                        <div className="text-xs text-zinc-500">{v.hint}</div>
-                      </div>
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
           </div>
         </section>
+
+        {/* View picker sits ABOVE content with its own stacking context */}
+        <div ref={menuRef} className="relative z-50 max-w-md">
+          <label className="text-[10px] uppercase tracking-[0.14em] text-zinc-400">
+            Showing
+          </label>
+          <button
+            type="button"
+            aria-expanded={menuOpen}
+            aria-haspopup="listbox"
+            onClick={() => setMenuOpen((o) => !o)}
+            className="mt-1 flex w-full items-center justify-between gap-3 rounded-2xl border border-zinc-300 bg-white px-4 py-3 text-left shadow-sm"
+          >
+            <div className="flex items-center gap-3">
+              <currentView.Icon className="h-4 w-4 text-zinc-500" />
+              <div>
+                <div className="text-sm font-semibold text-zinc-900">
+                  {currentView.label}
+                </div>
+                <div className="text-xs text-zinc-500">{currentView.hint}</div>
+              </div>
+            </div>
+            <ChevronDown
+              className={cn(
+                "h-4 w-4 shrink-0 text-zinc-400 transition",
+                menuOpen && "rotate-180",
+              )}
+            />
+          </button>
+          {menuOpen && (
+            <ul
+              role="listbox"
+              className="absolute left-0 right-0 top-full z-50 mt-2 overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-xl"
+            >
+              {VIEWS.map((v) => (
+                <li key={v.id} role="option" aria-selected={view === v.id}>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setView(v.id);
+                      setMenuOpen(false);
+                    }}
+                    className={cn(
+                      "flex w-full items-start gap-3 px-4 py-3 text-left hover:bg-zinc-50",
+                      view === v.id && "bg-zinc-50",
+                    )}
+                  >
+                    <v.Icon className="mt-0.5 h-4 w-4 text-zinc-500" />
+                    <div>
+                      <div className="text-sm font-semibold">{v.label}</div>
+                      <div className="text-xs text-zinc-500">{v.hint}</div>
+                    </div>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
 
         {loading && (
           <div className="rounded-2xl border border-zinc-200 bg-white px-6 py-14 text-center text-sm text-zinc-500">
@@ -333,22 +486,257 @@ export default function ShopPage() {
           </div>
         )}
 
-        {/* ========== CUSTOM PATH EDITION ========== */}
+        {/* Checkpoint Drops */}
+        {data?.checkpoints && (
+          <section className="rounded-[28px] border border-zinc-200 bg-white p-5 sm:p-6">
+            <div className="flex flex-wrap items-end justify-between gap-3">
+              <div>
+                <div className="text-[11px] uppercase tracking-[0.14em] text-zinc-400">
+                  Retention × revenue
+                </div>
+                <h2 className="mt-1 font-display text-2xl font-bold">
+                  Checkpoint Drops
+                </h2>
+                <p className="mt-1 max-w-xl text-sm text-zinc-500">
+                  Day 11 / 37 / 74 / 111 unlock exclusive IABTM pieces. Progress
+                  on the path becomes a purchase moment.
+                </p>
+              </div>
+              {data.nextCheckpoint && !data.nextCheckpoint.unlocked && (
+                <div className="rounded-2xl bg-[#f7f4ef] px-4 py-2 text-sm">
+                  Next: <strong>{data.nextCheckpoint.title}</strong>
+                  <span className="text-zinc-500">
+                    {" "}
+                    · {data.nextCheckpoint.daysRemaining}d left
+                  </span>
+                </div>
+              )}
+            </div>
+            <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              {data.checkpoints.map((c) => (
+                <div
+                  key={c.id}
+                  className={cn(
+                    "rounded-2xl border p-3",
+                    c.unlocked
+                      ? "border-zinc-900 bg-zinc-50"
+                      : "border-zinc-200 bg-white opacity-80",
+                  )}
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="text-[10px] font-semibold uppercase tracking-wide text-zinc-400">
+                      Day {c.day}
+                    </div>
+                    {c.unlocked ? (
+                      <Unlock className="h-3.5 w-3.5 text-emerald-600" />
+                    ) : (
+                      <Lock className="h-3.5 w-3.5 text-zinc-400" />
+                    )}
+                  </div>
+                  <div className="mt-1 text-sm font-semibold leading-snug">
+                    {c.title}
+                  </div>
+                  {c.product && (
+                    <div className="relative mt-3 aspect-square overflow-hidden rounded-xl bg-[#ece8e2]">
+                      <Image
+                        src={c.product.image}
+                        alt={c.product.title}
+                        fill
+                        className={cn(
+                          "object-contain p-2",
+                          !c.unlocked && "opacity-40 grayscale",
+                        )}
+                        sizes="200px"
+                      />
+                    </div>
+                  )}
+                  <p className="mt-2 text-[11px] leading-snug text-zinc-500">
+                    {c.unlocked ? c.unlockCopy : c.lockedCopy}
+                  </p>
+                  {c.unlocked && c.product ? (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const item = data.drop.find(
+                          (d) => d.id === c.product?.id,
+                        );
+                        if (item) {
+                          setSelected(item);
+                          setView("catalog");
+                        }
+                      }}
+                      className="mt-2 w-full rounded-full bg-zinc-900 py-1.5 text-xs font-semibold text-white"
+                    >
+                      Claim · ${c.priceHint.toFixed(0)}
+                    </button>
+                  ) : (
+                    <div className="mt-2 text-center text-[10px] text-zinc-400">
+                      {c.daysRemaining} days to unlock
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
+
+        {/* Demand Radar — IABTM founders */}
+        {data?.radar && (
+          <section className="rounded-[28px] border border-zinc-200 bg-[#171717] p-5 text-white sm:p-6">
+            <button
+              type="button"
+              onClick={() => setShowRadar((s) => !s)}
+              className="flex w-full items-center justify-between gap-3 text-left"
+            >
+              <div className="flex items-center gap-2">
+                <Radar className="h-4 w-4 text-zinc-400" />
+                <div>
+                  <div className="text-[11px] uppercase tracking-[0.14em] text-zinc-500">
+                    For IABTM · merch intelligence
+                  </div>
+                  <div className="font-display text-xl font-bold">
+                    Demand Radar
+                  </div>
+                </div>
+              </div>
+              <span className="text-xs text-zinc-500">
+                {showRadar ? "Hide" : "Show"}
+              </span>
+            </button>
+            {showRadar && (
+              <div className="mt-4 space-y-4">
+                <p className="text-sm text-zinc-300">{data.radar.founderBlurb}</p>
+                <div className="grid gap-3 sm:grid-cols-3">
+                  <div className="rounded-2xl bg-white/5 p-3">
+                    <div className="text-[10px] uppercase text-zinc-500">
+                      Sample
+                    </div>
+                    <div className="mt-1 text-lg font-semibold">
+                      {data.radar.sampleSize} paths
+                    </div>
+                    <div className="text-[11px] text-zinc-500">
+                      {data.radar.livePaths} live · {data.radar.demoPaths} demo ·{" "}
+                      {data.radar.source}
+                    </div>
+                  </div>
+                  <div className="rounded-2xl bg-white/5 p-3">
+                    <div className="text-[10px] uppercase text-zinc-500">
+                      Top I Am
+                    </div>
+                    <ul className="mt-1 space-y-0.5 text-sm">
+                      {data.radar.topIAm.slice(0, 3).map((t) => (
+                        <li key={t.label}>
+                          {t.label}{" "}
+                          <span className="text-zinc-500">×{t.count}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                  <div className="rounded-2xl bg-white/5 p-3">
+                    <div className="text-[10px] uppercase text-zinc-500">
+                      Restock signal
+                    </div>
+                    <div className="mt-1 text-sm font-semibold">
+                      {data.radar.restock.title}
+                    </div>
+                    <p className="mt-1 text-[11px] text-zinc-400">
+                      {data.radar.restock.why}
+                    </p>
+                  </div>
+                </div>
+                <div className="flex flex-wrap gap-2 text-[11px] text-zinc-400">
+                  <span>
+                    Stage mix: early {data.radar.stageMix.early} · mid{" "}
+                    {data.radar.stageMix.middle} · late{" "}
+                    {data.radar.stageMix.late}
+                  </span>
+                  <span>·</span>
+                  <span>
+                    Methods:{" "}
+                    {data.radar.topMethods
+                      .slice(0, 3)
+                      .map((m) => m.label)
+                      .join(", ")}
+                  </span>
+                </div>
+              </div>
+            )}
+          </section>
+        )}
+
+        {/* Deterministic axes explain */}
+        {data?.styleSystem && (
+          <section className="rounded-[28px] border border-zinc-200 bg-white">
+            <button
+              type="button"
+              onClick={() => setShowAxes((s) => !s)}
+              className="flex w-full items-center justify-between px-5 py-4 text-left sm:px-6"
+            >
+              <div>
+                <div className="text-sm font-semibold">
+                  Style axes · deterministic
+                </div>
+                <div className="text-xs text-zinc-500">
+                  Same path → same vector · no LLM in scoring
+                </div>
+              </div>
+              <span className="text-xs text-zinc-400">
+                {showAxes ? "Hide" : "Show"}
+              </span>
+            </button>
+            {showAxes && (
+              <div className="space-y-3 border-t border-zinc-100 px-5 py-4 sm:px-6">
+                <p className="text-sm text-zinc-600">{data.styleSystem.note}</p>
+                <div className="grid gap-2 sm:grid-cols-5">
+                  {data.styleSystem.axes.map((a) => (
+                    <HoverExplain
+                      key={a.axis}
+                      label={a.axis}
+                      explain={
+                        AXIS_HOVER[a.axis] ??
+                        `${a.why} Your score ${a.yourScore.toFixed(2)} came from the deterministic rule table + stage clamp — not an LLM.`
+                      }
+                      className="block"
+                      side="bottom"
+                    >
+                      <div className="cursor-help rounded-xl bg-[#f7f4ef] px-3 py-2 ring-1 ring-transparent hover:ring-zinc-300">
+                        <div className="text-[10px] uppercase text-zinc-400 underline decoration-dotted">
+                          {a.axis}
+                        </div>
+                        <div className="font-display text-lg font-bold tabular-nums">
+                          {a.yourScore.toFixed(2)}
+                        </div>
+                        <div className="mt-1 text-[10px] leading-snug text-zinc-500">
+                          {a.why}
+                        </div>
+                      </div>
+                    </HoverExplain>
+                  ))}
+                </div>
+                {data.styleProfile.fingerprint && (
+                  <p className="truncate font-mono text-[10px] text-zinc-400">
+                    fingerprint: {data.styleProfile.fingerprint}
+                  </p>
+                )}
+              </div>
+            )}
+          </section>
+        )}
+
+        {/* ========== ASPIRATIONAL PATH EDITION ========== */}
         {data && view === "custom" && (
-          <section className="overflow-hidden rounded-[28px] border border-zinc-200 bg-white">
+          <section className="relative z-0 overflow-hidden rounded-[28px] border border-zinc-200 bg-white">
             <div className="border-b border-zinc-100 px-5 py-4 sm:px-7 sm:py-5">
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
                   <div className="text-[11px] uppercase tracking-[0.14em] text-teal-700/80">
-                    Not in the IABTM shop yet · partner-makeable
+                    Aspirational only · Me friction stays in the diary
                   </div>
                   <h2 className="mt-1 font-display text-2xl font-bold sm:text-3xl">
-                    {frontLine || data.custom.frontLine} Path Edition
+                    {frontLine} Path Edition
                   </h2>
                   <p className="mt-2 max-w-xl text-sm text-zinc-500">
-                    We turn your path into a print brief. Customize color & copy
-                    below — this is the mockup a Printful-style partner would
-                    manufacture.
+                    {data.custom.why}
                   </p>
                 </div>
                 <div className="text-right">
@@ -359,7 +747,7 @@ export default function ShopPage() {
                     type="button"
                     onClick={() =>
                       alert(
-                        `Print brief ready:\n${garment} / ${color}\nFront: ${frontLine}\nBack: ${backLine}\n→ Send to Printful / apparel partner → ship.`,
+                        `Print brief:\n${garment} / ${color}\nFront: ${frontLine}\nBack: ${backLine}\n→ Partner prints & ships.`,
                       )
                     }
                     className="mt-2 rounded-full bg-zinc-900 px-4 py-2 text-sm font-semibold text-white"
@@ -371,7 +759,6 @@ export default function ShopPage() {
             </div>
 
             <div className="grid gap-0 lg:grid-cols-[1.1fr_0.9fr]">
-              {/* Visible garment */}
               <div className="bg-[#ece8e2] p-6 sm:p-8">
                 <div className="mb-3 flex items-center justify-between">
                   <div className="text-[10px] uppercase tracking-[0.14em] text-zinc-500">
@@ -399,20 +786,43 @@ export default function ShopPage() {
                   kind={garment}
                   color={color}
                   side={side}
-                  frontLine={frontLine || data.custom.frontLine}
-                  backLine={backLine || data.custom.backLine}
+                  frontLine={frontLine}
+                  backLine={backLine}
                   edition={data.custom.edition}
-                  sleeveHint={data.custom.sleeveHint}
-                  className="mx-auto max-w-[340px]"
+                  className="mx-auto"
                 />
-                <p className="mt-3 text-center text-[11px] text-zinc-500">
-                  SVG garment + print overlay — same pattern POD checkouts use
-                  before factory photos exist.
-                </p>
               </div>
 
-              {/* Customize */}
               <div className="space-y-5 p-5 sm:p-7">
+                <div>
+                  <div className="text-[10px] uppercase tracking-[0.14em] text-zinc-400">
+                    Curated quote (pick one — not free-text)
+                  </div>
+                  <div className="mt-2 space-y-2">
+                    {data.custom.quoteOptions.map((q) => (
+                      <button
+                        key={q.id}
+                        type="button"
+                        onClick={() => setQuoteId(q.id)}
+                        className={cn(
+                          "w-full rounded-2xl border px-4 py-3 text-left transition",
+                          quoteId === q.id
+                            ? "border-zinc-900 bg-zinc-50"
+                            : "border-zinc-200 hover:border-zinc-400",
+                        )}
+                      >
+                        <div className="text-sm font-semibold">{q.frontLine}</div>
+                        <div className="mt-0.5 text-xs text-zinc-500">
+                          Back: {q.backLine}
+                        </div>
+                        <div className="mt-1 text-[11px] text-zinc-400">
+                          {q.vibe}
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
                 <div>
                   <div className="text-[10px] uppercase tracking-[0.14em] text-zinc-400">
                     Garment
@@ -448,8 +858,9 @@ export default function ShopPage() {
                         title={c.label}
                         onClick={() => setColor(c.id)}
                         className={cn(
-                          "h-9 w-9 rounded-full ring-2 ring-offset-2",
+                          "h-9 w-9 rounded-full border border-zinc-200 ring-2 ring-offset-2",
                           color === c.id ? "ring-zinc-900" : "ring-transparent",
+                          c.id === "white" && "border-zinc-300",
                         )}
                         style={{ background: c.swatch }}
                       />
@@ -457,37 +868,13 @@ export default function ShopPage() {
                   </div>
                 </div>
 
-                <div>
-                  <label className="text-[10px] uppercase tracking-[0.14em] text-zinc-400">
-                    Front print (from your I Am)
-                  </label>
-                  <input
-                    value={frontLine}
-                    onChange={(e) => setFrontLine(e.target.value.toUpperCase())}
-                    className="mt-1.5 w-full rounded-xl border border-zinc-200 px-3 py-2.5 text-sm font-semibold outline-none focus:border-zinc-400"
-                    maxLength={28}
-                  />
-                </div>
-
-                <div>
-                  <label className="text-[10px] uppercase tracking-[0.14em] text-zinc-400">
-                    Back print (Me → I Am)
-                  </label>
-                  <input
-                    value={backLine}
-                    onChange={(e) => setBackLine(e.target.value)}
-                    className="mt-1.5 w-full rounded-xl border border-zinc-200 px-3 py-2.5 text-sm outline-none focus:border-zinc-400"
-                    maxLength={40}
-                  />
-                </div>
-
                 <div className="rounded-2xl bg-[#f7f4ef] p-4 text-xs leading-relaxed text-zinc-600">
-                  <strong className="text-zinc-800">How we generate this</strong>
+                  <strong className="text-zinc-800">Product rule</strong>
                   <ol className="mt-2 list-decimal space-y-1 pl-4">
-                    <li>Read path: Me, I Am, method, day.</li>
-                    <li>Build style vector → pick tee vs hoodie, default color.</li>
-                    <li>Front = I Am · Back = Me → I Am · sleeve = method.</li>
-                    <li>You edit here → print brief → partner manufactures.</li>
+                    <li>Apparel shows I Am / method energy only.</li>
+                    <li>Me → I Am arc lives in the private Path Diary.</li>
+                    <li>Primary revenue: ranked IABTM catalog + activity merch.</li>
+                    <li>Path Edition = optional POD for partners.</li>
                   </ol>
                 </div>
               </div>
@@ -498,6 +885,27 @@ export default function ShopPage() {
         {/* ========== CATALOG ========== */}
         {data && view === "catalog" && active && (
           <section className="space-y-4">
+            {occasionFilter && (
+              <div className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-zinc-200 bg-white px-5 py-3 text-sm text-zinc-600">
+                <span>
+                  From your activity · showing{" "}
+                  <strong className="font-semibold text-zinc-900">
+                    {occasionFilter}
+                  </strong>{" "}
+                  pieces first
+                </span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setOccasionFilter(null);
+                    window.history.replaceState({}, "", "/shop");
+                  }}
+                  className="text-xs font-semibold text-zinc-500 underline-offset-2 hover:underline"
+                >
+                  Clear filter
+                </button>
+              </div>
+            )}
             <div className="rounded-2xl border border-zinc-200 bg-white px-5 py-4 text-sm text-zinc-600">
               These SKUs already exist on{" "}
               <a
@@ -535,17 +943,30 @@ export default function ShopPage() {
                       </h2>
                       <p className="mt-2 text-sm text-zinc-500">{active.why}</p>
                       <div className="mt-4 space-y-1.5 rounded-2xl bg-[#f7f4ef] p-3 text-[11px]">
+                        <div className="mb-1 text-[10px] uppercase tracking-wide text-zinc-400">
+                          Axis comparison · hover for how each axis is set
+                        </div>
                         {active.explain.axisDeltas.map((d) => (
-                          <div key={d.axis} className="flex gap-2 capitalize">
-                            <span className="w-20 text-zinc-500">{d.axis}</span>
-                            <span>
-                              you {d.user.toFixed(2)} vs item{" "}
-                              {d.product.toFixed(2)}
-                            </span>
-                            <span className="ml-auto text-zinc-400">
-                              gap {d.gap.toFixed(2)}
-                            </span>
-                          </div>
+                          <HoverExplain
+                            key={d.axis}
+                            label={d.axis}
+                            explain={`${AXIS_HOVER[d.axis] ?? d.axis} Gap = |you − item| = ${d.gap.toFixed(2)}. Average gap across 5 axes feeds styleFit.`}
+                            className="block w-full"
+                            side="top"
+                          >
+                            <div className="flex cursor-help gap-2 capitalize rounded-lg px-1 py-0.5 hover:bg-white/70">
+                              <span className="w-20 text-zinc-500 underline decoration-dotted">
+                                {d.axis}
+                              </span>
+                              <span>
+                                you {d.user.toFixed(2)} vs item{" "}
+                                {d.product.toFixed(2)}
+                              </span>
+                              <span className="ml-auto text-zinc-400">
+                                gap {d.gap.toFixed(2)}
+                              </span>
+                            </div>
+                          </HoverExplain>
                         ))}
                       </div>
                     </div>
@@ -558,12 +979,22 @@ export default function ShopPage() {
                             ["Final", active.scores.final],
                           ] as const
                         ).map(([l, v]) => (
-                          <div key={l}>
-                            <div className="text-zinc-400">{l}</div>
-                            <div className="font-display text-lg font-bold tabular-nums">
-                              {v.toFixed(2)}
+                          <HoverExplain
+                            key={l}
+                            label={l}
+                            explain={MERCH_SCORE_HOVER[l]}
+                            className="justify-center"
+                            side="top"
+                          >
+                            <div className="cursor-help">
+                              <div className="text-zinc-400 underline decoration-dotted">
+                                {l}
+                              </div>
+                              <div className="font-display text-lg font-bold tabular-nums">
+                                {v.toFixed(2)}
+                              </div>
                             </div>
-                          </div>
+                          </HoverExplain>
                         ))}
                       </div>
                       <div className="ml-auto flex items-center gap-2">
