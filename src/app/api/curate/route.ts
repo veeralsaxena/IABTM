@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { runCuratorPipeline } from "@/lib/curator/pipeline";
+import { compileTwoTracks } from "@/lib/curator/licensed";
 import type { DailyBriefingResult, PathRecord } from "@/types";
 
 type CachedPayload = {
@@ -8,11 +9,41 @@ type CachedPayload = {
   secondary: DailyBriefingResult["secondary"];
   activity: DailyBriefingResult["activity"];
   activities: DailyBriefingResult["activities"];
+  twoTracks?: DailyBriefingResult["twoTracks"];
   reason: string;
   whyNow: string;
   discovery?: DailyBriefingResult["discovery"];
   trace: DailyBriefingResult["trace"];
 };
+
+function becomingFromPath(path: PathRecord): string | null {
+  const raw = path as PathRecord & {
+    identity_block?: { whoIAmBecoming?: string };
+    answers?: { identity_block?: { whoIAmBecoming?: string } };
+  };
+  return (
+    raw.identity_block?.whoIAmBecoming ??
+    raw.answers?.identity_block?.whoIAmBecoming ??
+    null
+  );
+}
+
+function tracksFor(
+  path: PathRecord,
+  activities: DailyBriefingResult["activities"],
+  learningStyles: string[],
+  vibe: string | null,
+  existing?: DailyBriefingResult["twoTracks"],
+) {
+  if (existing?.subconscious?.licensed) return existing;
+  return compileTwoTracks({
+    path,
+    activities,
+    learningStyles,
+    vibe,
+    becoming: becomingFromPath(path),
+  });
+}
 
 function daysBetween(a: Date, b: Date) {
   const ms = Math.abs(a.getTime() - b.getTime());
@@ -130,6 +161,20 @@ export async function POST(request: Request) {
       | null;
 
     if (existing && cached?._cachedBriefing && cached.primary) {
+      const acts =
+        cached.activities ?? (cached.activity ? [cached.activity] : []);
+      const { data: profileLite } = await supabase
+        .from("profiles")
+        .select("learning_styles, vibe")
+        .eq("id", user.id)
+        .maybeSingle();
+      const twoTracks = tracksFor(
+        activePath,
+        acts,
+        profileLite?.learning_styles ?? [],
+        (profileLite?.vibe as string) ?? null,
+        cached.twoTracks,
+      );
       return NextResponse.json({
         cached: true,
         daysAway,
@@ -139,7 +184,8 @@ export async function POST(request: Request) {
           primary: cached.primary,
           secondary: cached.secondary ?? [],
           activity: cached.activity ?? null,
-          activities: cached.activities ?? (cached.activity ? [cached.activity] : []),
+          activities: acts,
+          twoTracks,
           reason: existing.reason ?? cached.reason,
           whyNow: existing.why_now ?? cached.whyNow,
           discovery: cached.discovery,
@@ -151,7 +197,7 @@ export async function POST(request: Request) {
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("learning_styles")
+    .select("learning_styles, vibe")
     .eq("id", user.id)
     .maybeSingle();
 
@@ -169,6 +215,8 @@ export async function POST(request: Request) {
     learningStyles: profile?.learning_styles ?? [],
     checkIn: latestCheckIn?.body,
     daysAway,
+    vibe: (profile?.vibe as string) ?? null,
+    becoming: becomingFromPath(activePath),
   });
 
   const cachePayload: CachedPayload & { _cachedBriefing: true } = {
@@ -177,6 +225,7 @@ export async function POST(request: Request) {
     secondary: briefing.secondary,
     activity: briefing.activity,
     activities: briefing.activities,
+    twoTracks: briefing.twoTracks,
     reason: briefing.reason,
     whyNow: briefing.whyNow,
     discovery: briefing.discovery,

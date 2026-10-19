@@ -7,6 +7,8 @@ import { StatusPanel } from "@/components/StatusPanel";
 import { MediaPlayer } from "@/components/MediaPlayer";
 import { MediaReviewPanel } from "@/components/MediaReviewPanel";
 import { IdentityVectorMap } from "@/components/IdentityVectorMap";
+import { TwoTracksCard } from "@/components/TwoTracksCard";
+import type { TwoTracks } from "@/types";
 import {
   PostCard,
   PostComposer,
@@ -55,6 +57,7 @@ type BriefingPayload = {
     }>;
     activity: Activity | null;
     activities?: Activity[];
+    twoTracks?: TwoTracks;
     reason: string;
     whyNow: string;
     discovery?: {
@@ -449,6 +452,10 @@ export default function HomePage() {
               Your past low ratings still block similar content.
             </p>
           </div>
+        )}
+
+        {data && !loading && data.briefing.twoTracks && (
+          <TwoTracksCard tracks={data.briefing.twoTracks} />
         )}
 
         {data && !loading && (

@@ -17,6 +17,8 @@ import {
 } from "@/lib/curator/critic-agent";
 import { embedText } from "@/lib/ai/embeddings";
 import { groqJson, GROQ_MODEL } from "@/lib/ai/groq";
+import { compileTwoTracks } from "@/lib/curator/licensed";
+import { catalogMedia } from "@/lib/curator/recommend";
 import type {
   DailyBriefingResult,
   MediaItem,
@@ -315,6 +317,8 @@ export async function runCuratorPipeline(input: {
   checkIn?: string | null;
   /** Calendar days since last human activity (0 = active) */
   daysAway?: number;
+  vibe?: string | null;
+  becoming?: string | null;
 }): Promise<DailyBriefingResult> {
   const started = Date.now();
   const learningStyles = input.learningStyles ?? [];
@@ -438,10 +442,12 @@ export async function runCuratorPipeline(input: {
     }
   }
 
+  // Owned catalog always ranks, even when YouTube/web search is empty.
+  const shelf = catalogMedia();
+  discovered = mergeMediaById(shelf, discovered);
+
   if (!discovered.length) {
-    throw new Error(
-      "Web discovery returned no results. Check network access and try Recurate.",
-    );
+    throw new Error("Curator catalog is empty.");
   }
 
   const vectorScores = await vectorScoreCandidates(
@@ -487,11 +493,20 @@ export async function runCuratorPipeline(input: {
 
   primary.why = explanation.primaryWhy;
 
+  const twoTracks = compileTwoTracks({
+    path: input.path,
+    activities,
+    learningStyles,
+    vibe: input.vibe ?? null,
+    becoming: input.becoming ?? null,
+  });
+
   return {
     primary,
     secondary,
     activity: activities[0] ?? null,
     activities,
+    twoTracks,
     reason: explanation.reason,
     whyNow: explanation.whyNow,
     discovery: {

@@ -77,15 +77,28 @@ export function rerankCandidates(input: {
           0.15 * overlapScore(blob, [input.method]),
       );
 
+      // Tagged catalog: Me/I Am/method live on the item, not always in the title.
+      const attrFit = clamp01(
+        0.4 * overlapScore(item.from_attrs.join(" "), input.me) +
+          0.45 * overlapScore(item.to_attrs.join(" "), input.iam) +
+          0.15 *
+            (item.methods.some(
+              (m) =>
+                m.toLowerCase() === input.method.toLowerCase() ||
+                m.toLowerCase() === "any",
+            )
+              ? 1
+              : 0),
+      );
+
       const vectorRaw = input.vectorScores?.[item.id];
       const vectorFit =
         typeof vectorRaw === "number" ? cosineToUnit(vectorRaw) : null;
 
-      // Prefer semantic vector when present; otherwise lexical overlap.
       const identityFit =
         vectorFit != null
-          ? clamp01(0.75 * vectorFit + 0.25 * lexicalIdentity)
-          : lexicalIdentity;
+          ? clamp01(0.45 * vectorFit + 0.15 * lexicalIdentity + 0.4 * attrFit)
+          : clamp01(0.82 * attrFit + 0.18 * lexicalIdentity);
 
       const blobTokens = tokens(blob);
       const queryHit =
@@ -108,11 +121,12 @@ export function rerankCandidates(input: {
             : 0.55;
       if (returner && mins > 25) durationFit *= 0.5;
 
-      const methodFit = methodTokens.some((t) =>
-        blob.toLowerCase().includes(t),
-      )
-        ? 1
-        : 0.55;
+      const methodFit =
+        item.methods.some(
+          (m) => m.toLowerCase() === input.method.toLowerCase(),
+        ) || methodTokens.some((t) => blob.toLowerCase().includes(t))
+          ? 1
+          : 0.55;
 
       const styleFit = input.learningStyles.length
         ? Math.max(

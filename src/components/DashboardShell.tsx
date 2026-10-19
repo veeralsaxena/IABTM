@@ -23,6 +23,7 @@ import {
   Route,
   Settings,
   ShoppingBag,
+  Sparkles,
   UserRound,
   Workflow,
 } from "lucide-react";
@@ -39,6 +40,7 @@ export type { AppNotification };
 
 const nav = [
   { href: "/home", label: "Home", icon: Home },
+  { href: "/sensei", label: "Sensei MVP", icon: Sparkles },
   { href: "/media", label: "Curated media", icon: Film },
   { href: "/shop", label: "Becoming Drop", icon: ShoppingBag },
   { href: "/artists", label: "Artists", icon: Palette },

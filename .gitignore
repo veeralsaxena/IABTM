@@ -45,6 +45,9 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
+# local ingested catalog (filled by the ingest API)
+/data/ingested-catalog.json
+
 # local seed artifacts (huge embedding dumps)
 scripts/seed.sql
 scripts/chunks/

@@ -8,6 +8,7 @@
     "start": "next start",
     "lint": "eslint",
     "seed": "tsx scripts/seed.ts",
+    "curate": "tsx scripts/curate.ts",
     "slides": "npm run dev --prefix slides",
     "slides:export": "npm run export --prefix slides",
     "slides:pptx": "npx --prefix slides slidev export --format pptx"

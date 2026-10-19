@@ -88,11 +88,55 @@ export type ActivityItem = {
   category: string | null;
 };
 
+export type LicensePartner =
+  | "Harvard Business Review"
+  | "The New York Times"
+  | "Yellowbrick"
+  | "Entrepreneur"
+  | "MasterClass";
+
+export type SkillNode = "start" | "craft";
+
+export type LicensedPayload = {
+  id: string;
+  partner: LicensePartner;
+  title: string;
+  durationMinutes: number;
+  format: "editorial" | "module" | "lesson";
+  skillNode: SkillNode;
+  status: "now" | "later";
+  whyThisPartner: string;
+  whyNow: string;
+  href: string;
+};
+
+export type VisualizationBeat = {
+  title: string;
+  script: string;
+  durationSeconds: number;
+};
+
+export type TwoTracks = {
+  skillNode: SkillNode;
+  stage: JourneyStage;
+  subconscious: {
+    identityLine: string;
+    visualization: VisualizationBeat;
+    licensed: LicensedPayload;
+    held: LicensedPayload[];
+  };
+  action: {
+    primary: ActivityItem | null;
+    note: string;
+  };
+};
+
 export interface DailyBriefingResult {
   primary: ScoredMedia;
   secondary: ScoredMedia[];
   activity: ActivityItem | null;
   activities: ActivityItem[];
+  twoTracks?: TwoTracks;
   reason: string;
   whyNow: string;
   discovery?: {

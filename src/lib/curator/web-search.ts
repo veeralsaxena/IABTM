@@ -122,7 +122,7 @@ export async function searchWeb(
         next: { revalidate: 0 },
       },
     );
-    if (!res.ok) return [];
+    if (!res.ok) return searchArticles(query, limit);
     const html = await res.text();
     const titles = [...html.matchAll(/class="result__a"[^>]*>([^<]+)/g)].map(
       (m) => decodeHtml(m[1]),
@@ -156,7 +156,45 @@ export async function searchWeb(
         source: "web",
       });
     }
+    if (!out.length) return searchArticles(query, limit);
     return out;
+  } catch {
+    return searchArticles(query, limit);
+  }
+}
+
+/** Public encyclopedia search. Used when HTML web search is blocked. */
+export async function searchArticles(
+  query: string,
+  limit = 5,
+): Promise<DiscoveredCandidate[]> {
+  try {
+    const url = `https://en.wikipedia.org/w/api.php?action=query&list=search&srsearch=${encodeURIComponent(query)}&srlimit=${limit}&format=json&utf8=1`;
+    const res = await fetch(url, {
+      headers: {
+        "User-Agent": "IABTM-AgenticCurator/1.0 (local catalog ingest)",
+        Accept: "application/json",
+      },
+      signal: AbortSignal.timeout(8000),
+      next: { revalidate: 0 },
+    });
+    if (!res.ok) return [];
+    const data = (await res.json()) as {
+      query?: { search?: Array<{ title: string; snippet: string }> };
+    };
+    return (data.query?.search ?? []).slice(0, limit).map((hit) => {
+      const page = hit.title.replace(/ /g, "_");
+      const description = decodeHtml(hit.snippet.replace(/<[^>]+>/g, ""));
+      return {
+        title: hit.title,
+        description,
+        url: `https://en.wikipedia.org/wiki/${encodeURIComponent(page)}`,
+        creator: "Wikipedia",
+        media_type: "editorial" as const,
+        duration_minutes: 8,
+        source: "web" as const,
+      };
+    });
   } catch {
     return [];
   }
