@@ -8,28 +8,31 @@ Vector is an agentic media curator. You describe who you are now and who you wan
 
 ---
 
-## Quick start
+## Run the curator
+
+No login and no Supabase keys. The older screens (home, shop, posts) still talk to Supabase if you open them.
 
 ```bash
 npm install
-cp .env.example .env.local   # fill in your keys
 npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000).
+Open [http://localhost:3000/curator](http://localhost:3000/curator).
 
-### Environment
+| Call | What it does | Code |
+|---|---|---|
+| `POST /api/ingest/search` | Find videos and articles. Does not save. | `src/lib/curator/ingest.ts` |
+| `POST /api/ingest` | Save a search, or one `{ url, me, iam }`. | `src/lib/curator/ingest.ts` |
+| `GET /api/catalog` | List what is saved. | `src/lib/curator/catalog-store.ts` |
+| `GET /api/media/:id` | Player for one saved item. | `src/lib/media/youtube.ts` |
+| `POST /api/curator` | What to show this person. | `src/lib/curator/recommend.ts` |
 
-| Variable | Purpose |
-|---|---|
-| `NEXT_PUBLIC_SUPABASE_URL` | Supabase project URL |
-| `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | Anon / publishable key |
-| `GEMINI_API_KEY` | Identity and media embeddings (768-d) |
-| `GROQ_API_KEY` | Query planner and explainer (`openai/gpt-oss-120b`) |
+A saved video stays in `data/ingested-catalog.json`. It is shown again only when the method matches, or a current-self or imagined-self label overlaps. The map of those files is `src/lib/curator/index.ts`.
 
-Optional: `SUPABASE_SERVICE_ROLE_KEY` for CLI seeding (`npm run seed`).
-
-For local demos, turn off Supabase email confirmation so signup is instant.
+```bash
+curl -s localhost:3000/api/curator -H 'content-type: application/json' \
+  -d '{"me":["Procrastinating"],"iam":["Action-oriented"]}'
+```
 
 ---
 

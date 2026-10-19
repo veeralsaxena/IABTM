@@ -36,10 +36,10 @@ export default function LandingPage() {
             Live demo
           </Link>
             <Link
-              href="/login"
+              href="/curator"
               className="rounded-full bg-zinc-900 px-5 py-2.5 text-sm font-semibold text-white"
             >
-              Start here
+              Open curator
             </Link>
           </div>
         </div>
@@ -66,10 +66,10 @@ export default function LandingPage() {
             </p>
             <div className="mt-8 flex flex-wrap gap-3">
               <Link
-                href="/login"
+                href="/curator"
                 className="rounded-full bg-zinc-900 px-7 py-3.5 text-sm font-semibold text-white"
               >
-                I want to be better
+                Open curator
               </Link>
               <Link
                 href="/architecture"
